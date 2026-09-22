@@ -1,0 +1,14 @@
+import { Ghost } from 'lucide-react';
+import { Game } from '../../types';
+
+export const fnafSl: Game = {
+  id: 'fnaf-sl',
+  title: "Five Nights at Freddy's Sister Location",
+  description: "Welcome to Circus Baby's Pizza World.",
+  icon: Ghost,
+  type: 'iframe',
+  url: '/games/fnaf-sl/index.html',
+  popularity: 84,
+  series: 'FNAF',
+  seriesOrder: 6,
+};

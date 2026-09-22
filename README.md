@@ -1,11 +1,5 @@
-<div align="center">
-
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-
-  <h1>Built with AI Studio</h2>
-
-  <p>The fastest path from prompt to production with Gemini.</p>
-
-  <a href="https://aistudio.google.com/apps">Start building</a>
-
-</div>
+THIS IS CODED BY GEMINI, ALL IDEAS ARE MINE THOUGH. This is v1.0 
+see it for yourself! https://sigma-games.dev/ | https://sigma-sigma-rizz.vercel.app/ or go to the static.html and play them all in a single file!
+# AI BROKEN 
+## ILL FIX SOON
+### MUSIC COMING SOON TOO
