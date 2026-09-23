@@ -7,7 +7,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dev and production dependencies for compilation
-RUN npm ci
+RUN npm install
 
 # Copy the rest of the source code
 COPY . .
@@ -28,11 +28,12 @@ ENV PORT=3000
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 
-# Install only production dependencies to keep the image as tiny as possible
-RUN npm ci --only=production
+# Install only production dependencies
+RUN npm install --omit=dev
 
 # Expose port 3000
 EXPOSE 3000
 
 # Run the production bundle
 CMD ["npm", "run", "start"]
+
