@@ -36,4 +36,3 @@ EXPOSE 3000
 
 # Run the production bundle
 CMD ["npm", "run", "start"]
-
