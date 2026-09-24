@@ -138,9 +138,13 @@ export default function MusicSection() {
 
     try {
       const query = searchQuery.trim();
-      const endpoint = query
-        ? `/api/music/search?keyword=${encodeURIComponent(query)}&page=${nextPage}&limit=30`
-        : `/api/music/trending?limit=30&page=${nextPage}`;
+      const endpoint = musicSource === 'octave'
+        ? (query
+            ? `/api/music/octave/search?keyword=${encodeURIComponent(query)}&page=${nextPage}&limit=30`
+            : `/api/music/octave/trending?limit=30&page=${nextPage}`)
+        : (query
+            ? `/api/music/search?keyword=${encodeURIComponent(query)}&page=${nextPage}&limit=30`
+            : `/api/music/trending?limit=30&page=${nextPage}`);
 
       const res = await fetch(endpoint);
       const data = await res.json();

@@ -2,21 +2,44 @@ import { Router, Request, Response } from "express";
 
 const aiRouter = Router();
 
-function resolveCredential(): string {
-  return (process.env.EMIS_API_KEY || "").trim();
-}
-
-const DEFAULT_EMIS_KEY = resolveCredential();
 const EMIS_BASE_URL = "https://emis.zxs-is-very.cool/v1";
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
-function resolveGroqKey(req?: Request): string {
-  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) {
-    return process.env.GROQ_API_KEY.trim();
+export function resolveEmisKey(req?: Request): string {
+  const headerKey = req ? ((req.headers?.["x-emis-api-key"] || req.headers?.["x-api-key"]) as string) : "";
+  if (headerKey && headerKey.trim()) {
+    return headerKey.trim();
   }
+  if (req?.body?.emisApiKey && typeof req.body.emisApiKey === "string" && req.body.emisApiKey.trim()) {
+    return req.body.emisApiKey.trim();
+  }
+  return (process.env.EMIS_API_KEY || "").trim();
+}
+
+export function resolveGroqKey(req?: Request): string {
   const headerKey = req ? (req.headers?.["x-groq-api-key"] as string) : "";
   if (headerKey && headerKey.trim()) {
     return headerKey.trim();
+  }
+  if (req?.body?.groqApiKey && typeof req.body.groqApiKey === "string" && req.body.groqApiKey.trim()) {
+    return req.body.groqApiKey.trim();
+  }
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) {
+    return process.env.GROQ_API_KEY.trim();
+  }
+  return "";
+}
+
+export function resolveGeminiKey(req?: Request): string {
+  const headerKey = req ? (req.headers?.["x-gemini-api-key"] as string) : "";
+  if (headerKey && headerKey.trim()) {
+    return headerKey.trim();
+  }
+  if (req?.body?.geminiApiKey && typeof req.body.geminiApiKey === "string" && req.body.geminiApiKey.trim()) {
+    return req.body.geminiApiKey.trim();
+  }
+  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
+    return process.env.GEMINI_API_KEY.trim();
   }
   return "";
 }
@@ -199,17 +222,105 @@ async function getEmisModels(userKey: string): Promise<ModelInfo[]> {
   return cachedEmisModels || DEFAULT_EMIS_MODELS;
 }
 
+// GET /api/ai/status - check server environment and active keys
+aiRouter.get("/ai/status", (req: Request, res: Response) => {
+  const serverHasGroq = Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim());
+  const serverHasGemini = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim());
+  const serverHasEmis = Boolean(process.env.EMIS_API_KEY && process.env.EMIS_API_KEY.trim());
+
+  const activeGroq = Boolean(resolveGroqKey(req));
+  const activeGemini = Boolean(resolveGeminiKey(req));
+  const activeEmis = Boolean(resolveEmisKey(req));
+
+  const isCloudRun = Boolean(process.env.K_SERVICE || process.env.K_REVISION || process.env.CLOUD_RUN_JOB);
+
+  return res.json({
+    isCloudRun,
+    serverEnvKeys: {
+      groq: serverHasGroq,
+      gemini: serverHasGemini,
+      emis: serverHasEmis
+    },
+    activeKeys: {
+      hasGroqKey: activeGroq,
+      hasGeminiKey: activeGemini,
+      hasEmisKey: activeEmis
+    }
+  });
+});
+
+// POST /api/ai/verify-key - test whether an API key works
+aiRouter.post("/ai/verify-key", async (req: Request, res: Response) => {
+  const { provider, key } = req.body || {};
+  if (!key || typeof key !== "string" || !key.trim()) {
+    return res.status(400).json({ valid: false, message: "No API key was provided." });
+  }
+
+  const cleanKey = key.trim();
+
+  if (provider === "groq") {
+    try {
+      const response = await fetch(`${GROQ_BASE_URL}/models`, {
+        headers: { Authorization: `Bearer ${cleanKey}` }
+      });
+      if (response.ok) {
+        return res.json({ valid: true, message: "Groq API key is valid and connected!" });
+      }
+      const data: any = await response.json().catch(() => ({}));
+      return res.json({ valid: false, message: data?.error?.message || `Groq returned HTTP ${response.status}` });
+    } catch (e: any) {
+      return res.json({ valid: false, message: e?.message || "Failed to contact Groq API." });
+    }
+  }
+
+  if (provider === "gemini") {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`
+      );
+      if (response.ok) {
+        return res.json({ valid: true, message: "Google Gemini API key is valid and connected!" });
+      }
+      const data: any = await response.json().catch(() => ({}));
+      return res.json({ valid: false, message: data?.error?.message || `Google returned HTTP ${response.status}` });
+    } catch (e: any) {
+      return res.json({ valid: false, message: e?.message || "Failed to contact Google Gemini API." });
+    }
+  }
+
+  if (provider === "emis") {
+    try {
+      const response = await fetch(`${EMIS_BASE_URL}/models`, {
+        headers: {
+          Authorization: `Bearer ${cleanKey}`,
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+      });
+      if (response.ok) {
+        return res.json({ valid: true, message: "Emis API key is valid and connected!" });
+      }
+      return res.json({ valid: false, message: `Emis returned HTTP ${response.status}` });
+    } catch (e: any) {
+      return res.json({ valid: false, message: e?.message || "Failed to contact Emis API." });
+    }
+  }
+
+  return res.status(400).json({ valid: false, message: `Unknown provider: ${provider}` });
+});
+
 // GET /api/ai/models - fetch available models by provider
 aiRouter.get("/ai/models", async (req: Request, res: Response) => {
   const provider = ((req.query.provider as string) || "all").toLowerCase();
-  const userEmisKey = (req.headers["x-api-key"] as string) || DEFAULT_EMIS_KEY;
+  const userEmisKey = resolveEmisKey(req);
   const groqKey = resolveGroqKey(req);
+  const geminiKey = resolveGeminiKey(req);
 
   if (provider === "groq") {
     const models = await getGroqModels(groqKey);
     return res.json({
       provider: "groq",
       hasKey: Boolean(groqKey),
+      hasGeminiKey: Boolean(geminiKey),
       models
     });
   }
@@ -218,7 +329,7 @@ aiRouter.get("/ai/models", async (req: Request, res: Response) => {
     const models = await getEmisModels(userEmisKey);
     return res.json({
       provider: "emis",
-      hasKey: true,
+      hasKey: Boolean(userEmisKey),
       emisExhausted,
       emisExhaustedReason,
       models
@@ -233,7 +344,8 @@ aiRouter.get("/ai/models", async (req: Request, res: Response) => {
 
   return res.json({
     hasGroqKey: Boolean(groqKey),
-    hasEmisKey: true,
+    hasEmisKey: Boolean(userEmisKey),
+    hasGeminiKey: Boolean(geminiKey),
     emisExhausted,
     emisExhaustedReason,
     groq: groqModels,
@@ -254,11 +366,11 @@ interface GroqChatOptions {
   failoverReason?: string;
 }
 
-async function handleGeminiFallback(res: Response, options: { messages: any[]; stream: boolean }) {
-  const geminiKey = process.env.GEMINI_API_KEY;
+async function handleGeminiFallback(res: Response, options: { messages: any[]; stream: boolean }, req?: Request) {
+  const geminiKey = resolveGeminiKey(req);
   if (!geminiKey) {
     return res.status(503).json({
-      error: "All AI services are temporarily reaching their capacity. Please try again in a few moments."
+      error: "All AI services are temporarily reaching their capacity. Please add a GROQ_API_KEY or GEMINI_API_KEY in Settings > API Keys, or in your Google Cloud Run environment variables."
     });
   }
 
@@ -351,13 +463,14 @@ async function handleGeminiFallback(res: Response, options: { messages: any[]; s
 async function handleGroqChat(req: Request, res: Response, options: GroqChatOptions) {
   const { model, formattedMessages, stream, temperature, max_tokens, isFailover, originalProvider, originalModel, failoverReason } = options;
   const groqKey = resolveGroqKey(req);
+  const geminiKey = resolveGeminiKey(req);
 
   if (!groqKey) {
-    if (process.env.GEMINI_API_KEY) {
-      return handleGeminiFallback(res, { messages: formattedMessages, stream: !!stream });
+    if (geminiKey) {
+      return handleGeminiFallback(res, { messages: formattedMessages, stream: !!stream }, req);
     }
     return res.status(400).json({
-      error: "Groq API key is missing. Please configure GROQ_API_KEY in the application settings."
+      error: "Groq API key is missing. Please configure GROQ_API_KEY in Settings > API Keys or in your Google Cloud Run environment variables."
     });
   }
 
@@ -461,9 +574,9 @@ async function handleGroqChat(req: Request, res: Response, options: GroqChatOpti
     }
 
     if (!upstreamRes) {
-      if (process.env.GEMINI_API_KEY) {
-        console.warn("All Groq candidates exhausted. Falling back to server Gemini API...");
-        return handleGeminiFallback(res, { messages: formattedMessages, stream: !!stream });
+      if (geminiKey) {
+        console.warn("All Groq candidates exhausted. Falling back to Gemini API...");
+        return handleGeminiFallback(res, { messages: formattedMessages, stream: !!stream }, req);
       }
       return res.status(429).json({
         error: `All available AI models have temporarily reached their rate or quota limits (${lastErrorMessage}). Please try again in a few moments.`,
@@ -565,7 +678,7 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
     });
   } else {
     // Emis Provider with resilient automatic failover to Groq
-    const userEmisKey = (req.headers["x-api-key"] as string) || DEFAULT_EMIS_KEY;
+    const userEmisKey = resolveEmisKey(req);
     const selectedModel = (!model || model === "glm-5.3") ? "claude-fable-5-1" : model;
 
     try {
