@@ -116,6 +116,9 @@ const POPULAR_FALLBACK_MODELS: string[] = [
   'minimax-m3'
 ];
 
+// Customizable notice shown when Emis API is busy or has run out of usage
+export const EMIS_EXHAUSTED_CUSTOM_NOTICE = "Emis ran out of daily credits/quota. Automatically switched to Groq API so you can continue chatting without interruption!";
+
 export default function AiChat() {
   const colors = useThemeColors();
 
@@ -273,7 +276,7 @@ export default function AiChat() {
   // If Emis has run out from someone else using it, clicking it redirects to Groq tab with notice
   const handleSwitchProvider = (newProvider: AIProvider) => {
     if (newProvider === 'emis' && isEmisExhausted) {
-      setExhaustedNotice('Emis API has run out of usage from high activity. You have been sent to the Groq API tab so your chatting continues without interruption!');
+      setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
       setProvider('groq');
       return;
     }
@@ -315,7 +318,7 @@ export default function AiChat() {
           if (data.emisExhausted) {
             setIsEmisExhausted(true);
             setProvider('groq');
-            setExhaustedNotice('Emis API has run out of quota from other users. Automatically switched to Groq API so you can chat seamlessly!');
+            setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
           } else {
             setIsEmisExhausted(false);
           }
@@ -620,7 +623,7 @@ export default function AiChat() {
         if (provider === 'emis' && (isExhausted || response.status === 402 || response.status === 403 || response.status === 429 || errMessage.toLowerCase().includes('quota') || errMessage.toLowerCase().includes('verification') || errMessage.toLowerCase().includes('limit') || errMessage.toLowerCase().includes('credit'))) {
           setIsEmisExhausted(true);
           setProvider('groq');
-          setExhaustedNotice('Emis API has run out of usage or reached limits. Automatically switched to Groq API so you can continue chatting without interruption!');
+          setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
         }
 
         throw new Error(errMessage);
@@ -637,7 +640,7 @@ export default function AiChat() {
         storage.setItem('ai_provider', switchedProvider);
         if (switchedProvider === 'groq') {
           setIsEmisExhausted(true);
-          setExhaustedNotice(fallbackReason ? `Emis upstream is unavailable (${fallbackReason}). Switched to Groq LPU automatically!` : 'Switched to Groq LPU automatically so you can continue chatting without interruption!');
+          setExhaustedNotice(fallbackReason ? `${EMIS_EXHAUSTED_CUSTOM_NOTICE} (${fallbackReason})` : EMIS_EXHAUSTED_CUSTOM_NOTICE);
         }
       }
 
@@ -656,9 +659,11 @@ export default function AiChat() {
           }
           return s;
         }));
-        const origLabel = groqModels.find(m => m.id === originalModel)?.label || originalModel || targetModel;
-        const newLabel = groqModels.find(m => m.id === switchedModel)?.label || switchedModel;
-        setExhaustedNotice(`${origLabel} reached its rate or daily credit limit. Seamlessly switched to ${newLabel} so you can continue chatting without interruption!`);
+        
+        if (switchedProvider === 'groq' || provider === 'emis') {
+          setIsEmisExhausted(true);
+          setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
+        }
       }
 
       if (response.body) {
@@ -848,7 +853,7 @@ export default function AiChat() {
         if (provider === 'emis' && (isExhausted || response.status === 402 || response.status === 403 || response.status === 429 || errMessage.toLowerCase().includes('quota') || errMessage.toLowerCase().includes('verification') || errMessage.toLowerCase().includes('limit') || errMessage.toLowerCase().includes('credit'))) {
           setIsEmisExhausted(true);
           setProvider('groq');
-          setExhaustedNotice('Emis API has run out of usage or reached limits. Automatically switched to Groq API so you can continue chatting without interruption!');
+          setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
         }
 
         throw new Error(errMessage);
@@ -865,7 +870,7 @@ export default function AiChat() {
         storage.setItem('ai_provider', switchedProvider);
         if (switchedProvider === 'groq') {
           setIsEmisExhausted(true);
-          setExhaustedNotice(fallbackReason ? `Emis upstream is unavailable (${fallbackReason}). Switched to Groq LPU automatically!` : 'Switched to Groq LPU automatically so you can continue chatting without interruption!');
+          setExhaustedNotice(fallbackReason ? `${EMIS_EXHAUSTED_CUSTOM_NOTICE} (${fallbackReason})` : EMIS_EXHAUSTED_CUSTOM_NOTICE);
         }
       }
 
@@ -884,9 +889,11 @@ export default function AiChat() {
           }
           return s;
         }));
-        const origLabel = groqModels.find(m => m.id === originalModel)?.label || originalModel || targetModel;
-        const newLabel = groqModels.find(m => m.id === switchedModel)?.label || switchedModel;
-        setExhaustedNotice(`${origLabel} reached its rate or daily credit limit. Seamlessly switched to ${newLabel} so you can continue chatting without interruption!`);
+        
+        if (switchedProvider === 'groq' || provider === 'emis') {
+          setIsEmisExhausted(true);
+          setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
+        }
       }
 
       if (response.body) {

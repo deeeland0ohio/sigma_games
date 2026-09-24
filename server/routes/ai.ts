@@ -3,7 +3,7 @@ import { Router, Request, Response } from "express";
 const aiRouter = Router();
 
 function resolveCredential(): string {
-  return (process.env.EMIS_API_KEY || "emis-b589c1f79ebf96540c1916fea3a3102dafc14174").trim();
+  return (process.env.EMIS_API_KEY || "").trim();
 }
 
 const DEFAULT_EMIS_KEY = resolveCredential();
@@ -18,8 +18,7 @@ function resolveGroqKey(req?: Request): string {
   if (headerKey && headerKey.trim()) {
     return headerKey.trim();
   }
-  // Server-side fallback key to guarantee seamless AI access on every PC/device
-  return "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";
+  return "";
 }
 
 interface ModelInfo {

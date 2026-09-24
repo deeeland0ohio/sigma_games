@@ -20,6 +20,10 @@ export default function GamePlayer() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    setIframeUrl(game?.url);
+  }, [game?.url]);
+
+  useEffect(() => {
     const popupGames = ['crazy-cattle-3d', 'basket-random', 'soccer-random', 'boxing-random', 'geometry-dash', 'basket-bros', 'baseball-bros', 'football-bros', 'wrestle-bros', 'kart-bros', 'soccer-bros'];
     if (id && popupGames.includes(id)) {
       setShowPopup(true);
