@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTheme, useThemeColors, Theme, BackgroundStyle } from '../context/ThemeContext';
 import PageLayout from '../components/PageLayout';
-import { Palette, Monitor, Zap, Bug, Sliders, RefreshCw, Layout, Maximize2, Square, Lock, Trash2, Plus, ShieldAlert, Image as ImageIcon, Upload, Sparkles, Check, RotateCcw } from 'lucide-react';
+import { Palette, Monitor, Zap, Bug, Sliders, RefreshCw, Layout, Maximize2, Square, Lock, Trash2, Plus, ShieldAlert, Image as ImageIcon, Upload, Sparkles, Check, RotateCcw, Key } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import ApiKeyModal from '../components/ApiKeyModal';
+import { getCustomGroqKey, getCustomGeminiKey } from '../utils/aiKeys';
 
 export function SettingsContent() {
   const { 
@@ -23,6 +25,15 @@ export function SettingsContent() {
   const colors = useThemeColors();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
+  const [hasManualGroqKey, setHasManualGroqKey] = useState(false);
+  const [hasManualGeminiKey, setHasManualGeminiKey] = useState(false);
+
+  useEffect(() => {
+    setHasManualGroqKey(Boolean(getCustomGroqKey()));
+    setHasManualGeminiKey(Boolean(getCustomGeminiKey()));
+  }, []);
 
   const handleSetViewMode = (mode: 'page' | 'box') => {
     setSettingsViewMode(mode);
@@ -960,6 +971,53 @@ export function SettingsContent() {
             </section>
           )}
 
+          <section className="space-y-6 bg-zinc-900/40 border border-zinc-800/80 p-8 rounded-3xl min-w-[300px]">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-zinc-100">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-zinc-900 rounded-xl border border-zinc-800 flex-shrink-0">
+                  <Key size={22} style={{ color: colors.hexPrimary }} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    AI & API Keys
+                    {(hasManualGroqKey || hasManualGeminiKey) && (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                        Custom Key Active
+                      </span>
+                    )}
+                  </h2>
+                  <p className="text-xs text-zinc-400">Configure Groq and Gemini API keys manually or for Google Cloud Run</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsApiKeyModalOpen(true)}
+                className="px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold rounded-xl transition-all shadow-md flex items-center justify-center gap-2 flex-shrink-0 cursor-pointer active:scale-95"
+              >
+                <Key size={14} />
+                Manage API Keys
+              </button>
+            </div>
+
+            <div className="p-5 bg-zinc-950/60 border border-zinc-800/60 rounded-2xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div className="space-y-1 text-xs">
+                <div className="font-semibold text-white">
+                  Running on Google Cloud Run or custom host?
+                </div>
+                <p className="text-zinc-400 leading-relaxed max-w-xl">
+                  You can paste your Groq or Gemini API keys directly into your browser to use them immediately, or follow our simple step-by-step guide to configure <code className="text-emerald-400 font-mono">GROQ_API_KEY</code> in your Google Cloud Run dashboard.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsApiKeyModalOpen(true)}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-medium rounded-xl border border-zinc-700/80 transition-colors whitespace-nowrap flex-shrink-0 cursor-pointer"
+              >
+                Open Setup Guide →
+              </button>
+            </div>
+          </section>
+
           <section className="p-10 bg-zinc-900/50 border border-zinc-800 rounded-3xl space-y-6 min-w-[300px]">
             <h3 className="text-2xl font-bold text-white flex items-center gap-3">
               <Bug size={24} style={{ color: colors.hexPrimary }} className="flex-shrink-0" />
@@ -1161,6 +1219,15 @@ export function SettingsContent() {
           </section>
         </div>
       </div>
+
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onKeysUpdated={() => {
+          setHasManualGroqKey(Boolean(getCustomGroqKey()));
+          setHasManualGeminiKey(Boolean(getCustomGeminiKey()));
+        }}
+      />
     </div>
   );
 }

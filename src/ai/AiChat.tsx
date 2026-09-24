@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Bot, Send, Plus, Trash2, Copy, Check, RotateCcw, 
   ChevronDown, Square, MessageSquare, Download, X, Sparkles, ArrowDown,
-  Zap, Globe, AlertTriangle
+  Zap, Globe, AlertTriangle, Key
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import PageLayout from '../components/PageLayout';
@@ -11,6 +11,8 @@ import { CodeBlock } from './CodeBlock';
 import { MediaBlock } from './MediaBlock';
 import { useThemeColors } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
+import ApiKeyModal from '../components/ApiKeyModal';
+import { getAiRequestHeaders, getCustomGroqKey, getCustomGeminiKey } from '../utils/aiKeys';
 
 export type AIProvider = 'groq' | 'emis';
 
@@ -248,6 +250,7 @@ export default function AiChat() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
+  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const isUserScrolledUpRef = useRef(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -286,49 +289,52 @@ export default function AiChat() {
   };
 
   // Fetch all available models from API on mount, verify Emis health, and auto-failover to Groq if exhausted
-  useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const res = await fetch('/api/ai/models?provider=all');
-        if (res.ok) {
-          const data = await res.json();
-          if (Array.isArray(data.groq) && data.groq.length > 0) {
-            setGroqModels(data.groq);
-            const validGroqIds = new Set(data.groq.map((m: any) => m.id));
-            if (!validGroqIds.has(groqModel)) {
-              const fallback = data.groq[0]?.id || 'groq/compound';
-              setGroqModel(fallback);
-              storage.setItem('ai_groq_model', fallback);
-            }
-          }
-          if (Array.isArray(data.emis) && data.emis.length > 0) {
-            setEmisModels(data.emis);
-            const validEmisIds = new Set(data.emis.map((m: any) => m.id));
-            if (!validEmisIds.has(emisModel) || emisModel === 'glm-5.3') {
-              const fallback = data.emis.find((m: any) => m.id === DEFAULT_EMIS_MODEL)?.id || data.emis[0]?.id || DEFAULT_EMIS_MODEL;
-              setEmisModel(fallback);
-              storage.setItem('ai_emis_model', fallback);
-            }
-          }
-          if (typeof data.hasGroqKey === 'boolean') {
-            setHasGroqKey(data.hasGroqKey);
-          }
-
-          // Detect if Emis has run out or reached verification limit
-          if (data.emisExhausted) {
-            setIsEmisExhausted(true);
-            setProvider('groq');
-            setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
-          } else {
-            setIsEmisExhausted(false);
+  const fetchModels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/ai/models?provider=all', {
+        headers: getAiRequestHeaders()
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.groq) && data.groq.length > 0) {
+          setGroqModels(data.groq);
+          const validGroqIds = new Set(data.groq.map((m: any) => m.id));
+          if (!validGroqIds.has(groqModel)) {
+            const fallback = data.groq[0]?.id || 'groq/compound';
+            setGroqModel(fallback);
+            storage.setItem('ai_groq_model', fallback);
           }
         }
-      } catch (err) {
-        console.error('Failed to load models:', err);
+        if (Array.isArray(data.emis) && data.emis.length > 0) {
+          setEmisModels(data.emis);
+          const validEmisIds = new Set(data.emis.map((m: any) => m.id));
+          if (!validEmisIds.has(emisModel) || emisModel === 'glm-5.3') {
+            const fallback = data.emis.find((m: any) => m.id === DEFAULT_EMIS_MODEL)?.id || data.emis[0]?.id || DEFAULT_EMIS_MODEL;
+            setEmisModel(fallback);
+            storage.setItem('ai_emis_model', fallback);
+          }
+        }
+        if (typeof data.hasGroqKey === 'boolean') {
+          setHasGroqKey(data.hasGroqKey || Boolean(getCustomGroqKey()));
+        }
+
+        // Detect if Emis has run out or reached verification limit
+        if (data.emisExhausted) {
+          setIsEmisExhausted(true);
+          setProvider('groq');
+          setExhaustedNotice(EMIS_EXHAUSTED_CUSTOM_NOTICE);
+        } else {
+          setIsEmisExhausted(false);
+        }
       }
-    };
+    } catch (err) {
+      console.error('Failed to load models:', err);
+    }
+  }, [groqModel, emisModel]);
+
+  useEffect(() => {
     fetchModels();
-  }, []);
+  }, [fetchModels]);
 
   // Handle scroll events in chat container
   const handleScroll = useCallback(() => {
@@ -599,7 +605,8 @@ export default function AiChat() {
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          ...getAiRequestHeaders()
         },
         signal: abortController.signal,
         body: JSON.stringify({
@@ -830,7 +837,10 @@ export default function AiChat() {
       const targetModel = currentModel || (provider === 'groq' ? 'groq/compound' : DEFAULT_EMIS_MODEL);
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAiRequestHeaders()
+        },
         signal: abortController.signal,
         body: JSON.stringify({
           provider,
@@ -1254,6 +1264,16 @@ export default function AiChat() {
 
               <div className="flex items-center gap-1.5">
                 <button
+                  type="button"
+                  onClick={() => setIsApiKeyModalOpen(true)}
+                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 border border-zinc-700/60 shadow-sm cursor-pointer"
+                  title="Configure Groq / Gemini API Keys"
+                >
+                  <Key size={13} className="text-emerald-400" />
+                  <span className="hidden sm:inline">API Keys</span>
+                </button>
+
+                <button
                   onClick={exportChat}
                   disabled={!activeSession || activeSession.messages.length === 0}
                   className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-40"
@@ -1540,6 +1560,12 @@ export default function AiChat() {
         </div>
 
       </div>
+
+      <ApiKeyModal
+        isOpen={isApiKeyModalOpen}
+        onClose={() => setIsApiKeyModalOpen(false)}
+        onKeysUpdated={fetchModels}
+      />
     </PageLayout>
   );
 }

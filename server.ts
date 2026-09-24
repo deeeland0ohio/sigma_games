@@ -3,6 +3,34 @@ import { createServer as createViteServer } from "vite";
 import compression from "compression";
 import path from "path";
 import fs from "fs";
+
+// Automatically load .env file if it exists (supports both Node native process.loadEnvFile and manual fallback)
+try {
+  const envPath = path.resolve(process.cwd(), ".env");
+  if (fs.existsSync(envPath)) {
+    // @ts-ignore
+    if (typeof process.loadEnvFile === "function") {
+      // @ts-ignore
+      process.loadEnvFile(envPath);
+    } else {
+      const content = fs.readFileSync(envPath, "utf-8");
+      for (const line of content.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+          const idx = trimmed.indexOf("=");
+          const key = trimmed.slice(0, idx).trim();
+          const val = trimmed.slice(idx + 1).trim().replace(/^['"](.*)['"]$/, "$1");
+          if (key && !process.env[key]) {
+            process.env[key] = val;
+          }
+        }
+      }
+    }
+  }
+} catch (e) {
+  console.warn("[Server] Note: Could not load .env file:", e);
+}
+
 import apiRouter from "./server/routes/index";
 import { gameAssetInterceptor } from "./server/middleware/gameAssetInterceptor";
 

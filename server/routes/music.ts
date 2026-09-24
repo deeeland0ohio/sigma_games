@@ -511,35 +511,40 @@ function getDynamicExpansionQueries(rawQuery: string): string[] {
   return Array.from(new Set(queries));
 }
 
+// Fetch SoundCloud Trending tracks
+async function fetchSoundCloudTrending(limit: number = 30): Promise<any[]> {
+  const cacheKey = `trending:all:${limit}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
+    return cached.data;
+  }
+
+  const clientId = await getSoundCloudClientId();
+  const query = "top hits 2024 2025 mainstream pop rap phonk";
+
+  const scUrl = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${clientId}&limit=${limit * 2}`;
+  const resp = await fetch(scUrl, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(6000)
+  });
+
+  if (!resp.ok) {
+    return [];
+  }
+
+  const data = await resp.json();
+  const collection = data?.collection || [];
+  const songs = processRankAndDeduplicate(collection, query, false).slice(0, limit);
+
+  searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+  return songs;
+}
+
 // Trending / Featured Real Tracks
 musicRouter.get("/music/trending", async (req: Request, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string || "30", 10) || 30, 50);
-    const cacheKey = `trending:all:${limit}`;
-
-    const cached = searchCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-      return res.json({ songs: cached.data });
-    }
-
-    const clientId = await getSoundCloudClientId();
-    const query = "top hits 2024 2025 mainstream pop rap phonk";
-
-    const scUrl = `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${clientId}&limit=${limit * 2}`;
-    const resp = await fetch(scUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(6000)
-    });
-
-    if (!resp.ok) {
-      return res.json({ songs: [] });
-    }
-
-    const data = await resp.json();
-    const collection = data?.collection || [];
-    const songs = processRankAndDeduplicate(collection, query, false).slice(0, limit);
-
-    searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+    const songs = await fetchSoundCloudTrending(limit);
     res.json({ songs });
   } catch (err: any) {
     console.error("Trending fetch error:", err?.message);
@@ -555,9 +560,8 @@ musicRouter.get("/music/search", async (req: Request, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string || "30", 10) || 30, 50);
 
     if (!keyword) {
-      const trendingResp = await fetch(`http://localhost:3000/api/music/trending?limit=${limit}`);
-      const tData = await trendingResp.json();
-      return res.json(tData);
+      const songs = await fetchSoundCloudTrending(limit);
+      return res.json({ songs });
     }
 
     const cacheKey = `search:${keyword}:${page}:${limit}`;
@@ -820,25 +824,174 @@ function processAndDeduplicateOctave(rawTracks: any[], rawQuery: string = ""): a
   return results;
 }
 
+// Process and deduplicate iTunes tracks for Octave fallback
+function processAndDeduplicateITunes(rawTracks: any[], rawQuery: string = ""): any[] {
+  const seenKeys = new Set<string>();
+  const results: any[] = [];
+  const qLower = (rawQuery || "").toLowerCase();
+
+  for (const item of rawTracks || []) {
+    if (!item || !item.trackName) continue;
+
+    const rawTitle = (item.trackName || "").trim();
+    const artist = (item.artistName || "Unknown Artist").trim();
+
+    if (isUnwantedEdit(rawTitle, qLower)) continue;
+
+    const editType = detectTrackEditType(rawTitle);
+    const { formattedTitle, isSpedUp, isSlowed } = formatSongTitle(rawTitle, rawQuery);
+
+    const coreTitle = cleanTitle(rawTitle)
+      .replace(/\b(remastered|remaster|radio edit|deluxe|version|edition|album version|explicit|clean|live|acoustic)\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    const coreArtist = cleanTitle(artist);
+    const dedupKey = `${coreTitle}::${editType}::${coreArtist}`;
+
+    if (seenKeys.has(dedupKey)) continue;
+    seenKeys.add(dedupKey);
+
+    const durSec = item.trackTimeMillis ? Math.round(item.trackTimeMillis / 1000) : 0;
+    const pic = item.artworkUrl100 ? item.artworkUrl100.replace("100x100bb", "600x600bb") : "";
+
+    results.push({
+      id: `octave_${item.trackId || Math.random().toString(36).substring(2, 9)}`,
+      rawId: item.trackId,
+      name: formattedTitle,
+      artist: artist,
+      album: item.collectionName || "",
+      pic: pic,
+      url: "",
+      previewUrl: item.previewUrl || "",
+      duration: durSec,
+      formattedDuration: formatSeconds(durSec),
+      source: "Octave",
+      isSpedUp,
+      isSlowed
+    });
+  }
+
+  if (isSpedUpQuery(rawQuery)) {
+    results.sort((a, b) => (b.isSpedUp ? 1 : 0) - (a.isSpedUp ? 1 : 0));
+  } else if (isSlowedQuery(rawQuery)) {
+    results.sort((a, b) => (b.isSlowed ? 1 : 0) - (a.isSlowed ? 1 : 0));
+  }
+
+  return results;
+}
+
+// Fetch Octave Trending tracks with Deezer primary + iTunes fallback
+async function fetchOctaveTrending(limit: number = 30): Promise<any[]> {
+  const cacheKey = `octave_trending_${limit}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 1000 * 60 * 10) {
+    return cached.data;
+  }
+
+  // 1. Try Deezer Chart
+  try {
+    const resp = await fetch("https://api.deezer.com/chart/0/tracks?limit=60", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data?.data) && data.data.length > 0) {
+        const songs = processAndDeduplicateOctave(data.data, "").slice(0, limit);
+        if (songs.length > 0) {
+          searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+          return songs;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn("Deezer trending fallback to iTunes:", err?.message);
+  }
+
+  // 2. Fallback to iTunes Top Hits
+  try {
+    const itunesResp = await fetch("https://itunes.apple.com/search?term=top+hits+2025&entity=song&limit=60", {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (itunesResp.ok) {
+      const itunesData = await itunesResp.json();
+      if (Array.isArray(itunesData?.results) && itunesData.results.length > 0) {
+        const songs = processAndDeduplicateITunes(itunesData.results, "").slice(0, limit);
+        if (songs.length > 0) {
+          searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+          return songs;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("iTunes trending fallback error:", err?.message);
+  }
+
+  return [];
+}
+
+// Fetch Octave Search tracks with Deezer primary + iTunes fallback
+async function fetchOctaveSearch(keyword: string, limit: number = 30, page: number = 1): Promise<any[]> {
+  if (!keyword) {
+    return fetchOctaveTrending(limit);
+  }
+
+  const offset = (page - 1) * limit;
+  const cacheKey = `octave_search_${keyword}_${page}_${limit}`;
+  const cached = searchCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 1000 * 60 * 10) {
+    return cached.data;
+  }
+
+  // 1. Try Deezer Search
+  try {
+    const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(keyword)}&limit=60&index=${offset}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (Array.isArray(data?.data) && data.data.length > 0) {
+        const songs = processAndDeduplicateOctave(data.data, keyword).slice(0, limit);
+        if (songs.length > 0) {
+          searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+          return songs;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.warn("Deezer search fallback to iTunes:", err?.message);
+  }
+
+  // 2. Fallback to iTunes Search
+  try {
+    const itunesResp = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(keyword)}&entity=song&limit=${limit * 2}&offset=${offset}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+      signal: AbortSignal.timeout(4000)
+    });
+    if (itunesResp.ok) {
+      const itunesData = await itunesResp.json();
+      if (Array.isArray(itunesData?.results) && itunesData.results.length > 0) {
+        const songs = processAndDeduplicateITunes(itunesData.results, keyword).slice(0, limit);
+        if (songs.length > 0) {
+          searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+          return songs;
+        }
+      }
+    }
+  } catch (err: any) {
+    console.error("iTunes search error:", err?.message);
+  }
+
+  return [];
+}
+
 // Octave Music Engine Endpoints (High Quality Open Audio Engine)
 musicRouter.get("/music/octave/trending", async (req: Request, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string || "30", 10) || 30, 50);
-    const cacheKey = `octave_trending_${limit}`;
-    const cached = searchCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < 1000 * 60 * 10) {
-      return res.json({ songs: cached.data });
-    }
-
-    const resp = await fetch("https://api.deezer.com/chart/0/tracks?limit=60", {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(5000)
-    });
-    if (!resp.ok) return res.json({ songs: [] });
-    const data = await resp.json();
-    const songs = processAndDeduplicateOctave(data.data || [], "").slice(0, limit);
-
-    searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+    const songs = await fetchOctaveTrending(limit);
     res.json({ songs });
   } catch (err: any) {
     console.error("Octave trending error:", err?.message);
@@ -850,27 +1003,9 @@ musicRouter.get("/music/octave/search", async (req: Request, res: Response) => {
   try {
     const keyword = (req.query.keyword as string || "").trim();
     const limit = Math.min(parseInt(req.query.limit as string || "30", 10) || 30, 50);
-    if (!keyword) {
-      const resp = await fetch(`http://localhost:3000/api/music/octave/trending?limit=${limit}`);
-      const data = await resp.json();
-      return res.json(data);
-    }
+    const page = parseInt(req.query.page as string || "1", 10) || 1;
 
-    const cacheKey = `octave_search_${keyword}_${limit}`;
-    const cached = searchCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < 1000 * 60 * 10) {
-      return res.json({ songs: cached.data });
-    }
-
-    const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(keyword)}&limit=60`, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(5000)
-    });
-    if (!resp.ok) return res.json({ songs: [] });
-    const data = await resp.json();
-    const songs = processAndDeduplicateOctave(data.data || [], keyword).slice(0, limit);
-
-    searchCache.set(cacheKey, { data: songs, timestamp: Date.now() });
+    const songs = await fetchOctaveSearch(keyword, limit, page);
     res.json({ songs });
   } catch (err: any) {
     console.error("Octave search error:", err?.message);
