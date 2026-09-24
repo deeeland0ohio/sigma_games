@@ -24,9 +24,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# Copy dependency files and build output
+# Copy dependency files, public assets, and build output
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/static.html ./static.html
+COPY --from=builder /app/static.svg ./static.svg
 
 # Install only production dependencies
 RUN npm install --omit=dev

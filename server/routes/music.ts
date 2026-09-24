@@ -61,7 +61,7 @@ function cleanTitle(str: string): string {
     .trim();
 }
 
-// Check if query is explicitly asking for sped up or slowed versions
+// Check if query is asking for sped up or slowed versions
 export function isSpedUpQuery(q: string): boolean {
   return /\b(sped\s*up|speed\s*up|speedup|speed-up|nightcore|fast\s*version|accelerated|\bsped\b)\b/i.test(q || "");
 }
@@ -81,7 +81,7 @@ export function detectTrackEditType(title: string): 'sped_up' | 'slowed' | 'none
   return 'none';
 }
 
-// Ensures track titles explicitly state (Sped Up) or (Slowed) / (Slowed + Reverb)
+// Ensures track titles says (Sped Up) or (Slowed) / (Slowed + Reverb)
 export function formatSongTitle(title: string, userQuery: string = ""): {
   formattedTitle: string;
   isSpedUp: boolean;
@@ -144,9 +144,7 @@ const JUNK_KEYWORDS = [
   "teaser",
   "snippet",
   "leak",
-  "earrape",
-  "bass boosted",
-  "bassboost"
+  "earrape"
 ];
 
 function isUnwantedEdit(title: string, rawQuery: string = ""): boolean {
@@ -157,22 +155,18 @@ function isUnwantedEdit(title: string, rawQuery: string = ""): boolean {
   const userWantsSlowed = isSlowedQuery(q);
   const trackEdit = detectTrackEditType(t);
 
-  // If user specifically asked for sped up, DO NOT reject sped up tracks
   if (userWantsSpedUp && trackEdit === 'sped_up') {
     return false;
   }
 
-  // If user specifically asked for slowed, DO NOT reject slowed tracks
   if (userWantsSlowed && trackEdit === 'slowed') {
     return false;
   }
 
-  // If user did NOT ask for sped up, reject sped up
   if (!userWantsSpedUp && trackEdit === 'sped_up') {
     return true;
   }
 
-  // If user did NOT ask for slowed, reject slowed
   if (!userWantsSlowed && trackEdit === 'slowed') {
     return true;
   }
@@ -494,7 +488,7 @@ function getDynamicExpansionQueries(rawQuery: string): string[] {
   const clean = rawQuery.toLowerCase().trim();
   if (!clean) return [];
 
-  const normalized = clean.replace(/(.)\1+/g, "$1"); // remove duplicate letters like nadda -> nada
+  const normalized = clean.replace(/(.)\1+/g, "$1");
   const queries = [clean];
 
   if (normalized !== clean && normalized.length > 2) {
@@ -881,6 +875,72 @@ musicRouter.get("/music/octave/search", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Octave search error:", err?.message);
     res.status(500).json({ songs: [] });
+  }
+});
+
+// Audio stream proxy endpoint for cross-origin / school network / Chromebook compatibility
+musicRouter.get("/music/proxy", async (req: Request, res: Response) => {
+  try {
+    const targetUrl = req.query.url as string;
+    if (!targetUrl || !targetUrl.startsWith("http")) {
+      return res.status(400).send("Invalid target URL");
+    }
+
+    const rangeHeader = req.headers.range;
+    const fetchHeaders: Record<string, string> = {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+      "Referer": "https://soundcloud.com/"
+    };
+    if (rangeHeader) {
+      fetchHeaders["Range"] = rangeHeader;
+    }
+
+    const upstream = await fetch(targetUrl, {
+      headers: fetchHeaders,
+      signal: AbortSignal.timeout(12000)
+    });
+
+    if (!upstream.ok && upstream.status !== 206) {
+      return res.status(upstream.status).send("Stream fetch error");
+    }
+
+    // Pass through appropriate audio content headers
+    const contentType = upstream.headers.get("content-type") || "audio/mpeg";
+    const contentLength = upstream.headers.get("content-length");
+    const contentRange = upstream.headers.get("content-range");
+    const acceptRanges = upstream.headers.get("accept-ranges") || "bytes";
+
+    res.status(upstream.status);
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Accept-Ranges", acceptRanges);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (contentLength) res.setHeader("Content-Length", contentLength);
+    if (contentRange) res.setHeader("Content-Range", contentRange);
+
+    if (upstream.body) {
+      const reader = upstream.body.getReader();
+      const pump = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            if (res.writableEnded || res.closed) break;
+            res.write(Buffer.from(value));
+          }
+        } catch (e) {
+          // Client disconnected
+        } finally {
+          res.end();
+        }
+      };
+      pump();
+    } else {
+      res.end();
+    }
+  } catch (err: any) {
+    if (!res.headersSent) {
+      res.status(500).send("Proxy error: " + err?.message);
+    }
   }
 });
 

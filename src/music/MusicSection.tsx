@@ -19,6 +19,9 @@ import {
   Info
 } from 'lucide-react';
 
+export const SEARCH_PLACEHOLDER_TEXT = "Search any song, artist, or genre";
+export const NO_TRACK_ARTIST_PLACEHOLDER = "Search any song or artist below";
+
 export default function MusicSection() {
   const colors = useThemeColors();
   const {
@@ -221,7 +224,7 @@ export default function MusicSection() {
                 {currentTrack ? currentTrack.name : 'No track playing'}
               </h4>
               <div className="flex items-center justify-center md:justify-start gap-1.5 text-sm text-zinc-400 truncate">
-                <span className="truncate">{currentTrack ? currentTrack.artist : 'Search any song or artist below'}</span>
+                <span className="truncate">{currentTrack ? currentTrack.artist : NO_TRACK_ARTIST_PLACEHOLDER}</span>
                 {currentTrack?.isVerified && (
                   <span title="Verified Artist"><BadgeCheck size={16} className="text-sky-400 flex-shrink-0" /></span>
                 )}
@@ -405,7 +408,7 @@ export default function MusicSection() {
           <div className="relative flex-1">
             <input
               type="text"
-              placeholder={`Search any song, artist, or genre (e.g. montagem, phonk, lofi, rock, rap)...`}
+              placeholder={SEARCH_PLACEHOLDER_TEXT}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-11 pr-4 py-3 text-sm bg-zinc-950/80 border border-zinc-800 rounded-2xl text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-zinc-600 focus:ring-1 focus:ring-zinc-600 transition-all"

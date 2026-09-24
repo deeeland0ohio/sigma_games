@@ -6,12 +6,40 @@ import { Request, Response, NextFunction } from "express";
 // and rewrite old commit hashes to prevent crashes
 export async function gameAssetInterceptor(req: Request, res: Response, next: NextFunction) {
   try {
-    let reqPath = decodeURIComponent(req.path);
+    const rawPath = req.originalUrl ? req.originalUrl.split('?')[0] : req.path;
+    let reqPath = decodeURIComponent(rawPath);
+
+    // Locate file in public or dist directory
     let filePath = path.join(process.cwd(), 'public', reqPath);
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(process.cwd(), 'dist', reqPath);
+    }
 
     if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
       filePath = path.join(filePath, 'index.html');
       reqPath = reqPath.endsWith('/') ? `${reqPath}index.html` : `${reqPath}/index.html`;
+    }
+
+    // Support paths omitting .html extension or directory slash
+    if (!fs.existsSync(filePath) && !filePath.endsWith('.html')) {
+      const candidateIndexPublic = path.join(process.cwd(), 'public', reqPath, 'index.html');
+      const candidateIndexDist = path.join(process.cwd(), 'dist', reqPath, 'index.html');
+      const candidateHtmlPublic = path.join(process.cwd(), 'public', `${reqPath}.html`);
+      const candidateHtmlDist = path.join(process.cwd(), 'dist', `${reqPath}.html`);
+
+      if (fs.existsSync(candidateIndexPublic)) {
+        filePath = candidateIndexPublic;
+        reqPath = reqPath.endsWith('/') ? `${reqPath}index.html` : `${reqPath}/index.html`;
+      } else if (fs.existsSync(candidateIndexDist)) {
+        filePath = candidateIndexDist;
+        reqPath = reqPath.endsWith('/') ? `${reqPath}index.html` : `${reqPath}/index.html`;
+      } else if (fs.existsSync(candidateHtmlPublic)) {
+        filePath = candidateHtmlPublic;
+        reqPath = `${reqPath}.html`;
+      } else if (fs.existsSync(candidateHtmlDist)) {
+        filePath = candidateHtmlDist;
+        reqPath = `${reqPath}.html`;
+      }
     }
 
     if (filePath.endsWith('.html') && fs.existsSync(filePath)) {

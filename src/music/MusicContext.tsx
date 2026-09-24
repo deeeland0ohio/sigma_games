@@ -430,9 +430,30 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           hasResolved = true;
           resolve(true);
         }
-      }).catch(err => {
+      }).catch(async (err) => {
         clearTimeout(safetyTimer);
-        console.warn('Direct audio play catch:', err);
+        console.warn('Direct audio play catch, trying proxy fallback:', err);
+        // If direct stream was blocked by browser or network filter, attempt proxy stream
+        if (!audioUrl.startsWith('/api/music/proxy') && audioUrl.startsWith('http')) {
+          try {
+            const proxyUrl = `/api/music/proxy?url=${encodeURIComponent(audioUrl)}`;
+            if (audioRef.current && (expectedRequestId === undefined || playRequestIdRef.current === expectedRequestId)) {
+              audioRef.current.src = proxyUrl;
+              audioRef.current.load();
+              await audioRef.current.play();
+              setIsPlaying(true);
+              setIsLoadingAudio(false);
+              if (!hasResolved) {
+                hasResolved = true;
+                resolve(true);
+              }
+              return;
+            }
+          } catch (proxyErr) {
+            console.warn('Proxy fallback playback failed:', proxyErr);
+          }
+        }
+
         setIsLoadingAudio(false);
         if (!hasResolved) {
           hasResolved = true;
