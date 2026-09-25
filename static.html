@@ -291,7 +291,7 @@
 </head>
 <body class="font-sans min-h-screen relative flex flex-col selection:bg-red-500/30 selection:text-white">
 
-  <div id="fake-login-screen" dir="ltr">
+  <div id="fake-login-screen" dir="ltr" onclick="(function(){var s=document.getElementById('fake-login-screen'),st=document.getElementById('fake-login-styles');if(s)s.style.display='none';if(st)st.remove();})()">
     <button class="spanish-btn" onclick="window.open('https://lausdschoology.azurewebsites.net/es?destination=home&domain=lms.lausd.net&timestamp=1772741033', '_blank')">
       En Español
     </button>
@@ -1989,46 +1989,75 @@
       return "Are you sure you want to close this page? Any unsaved progress or changes may be lost.";
     });
 
-    initDotBackground();
-    startTerminalBoot();
-
-    if (typeof lucide !== 'undefined' && lucide.createIcons) {
-      lucide.createIcons();
-    }
-
-    // Fake Schoology Cloaking Screen Auto-Disappearance (after 3 seconds)
+    // Fake Schoology Cloaking Screen Auto-Disappearance (after 3 seconds or on click/keypress)
     let fakeDismissed = false;
     function dismissFakeScreen() {
       if (fakeDismissed) return;
       fakeDismissed = true;
-      const fakeScreen = document.getElementById('fake-login-screen');
-      const fakeStyles = document.getElementById('fake-login-styles');
-      if (fakeScreen) {
-        fakeScreen.style.transition = 'opacity 0.3s ease';
-        fakeScreen.style.opacity = '0';
-        fakeScreen.style.pointerEvents = 'none';
-        setTimeout(() => {
-          if (fakeScreen) fakeScreen.remove();
-          if (fakeStyles) fakeStyles.remove();
-        }, 300);
-      }
-      document.title = (function(){try{return localStorage.getItem('app-cloaking-title');}catch(e){return null;}})() || "Sigma Games";
-      const favicon = document.getElementById('dynamic-favicon');
-      if (favicon) {
-        favicon.href = (function(){try{return localStorage.getItem('app-cloaking-icon');}catch(e){return null;}})() || '/static.svg';
-        favicon.type = 'image/svg+xml';
-      }
+      try {
+        const fakeScreen = document.getElementById('fake-login-screen');
+        const fakeStyles = document.getElementById('fake-login-styles');
+        if (fakeScreen) {
+          fakeScreen.style.transition = 'opacity 0.25s ease';
+          fakeScreen.style.opacity = '0';
+          fakeScreen.style.pointerEvents = 'none';
+          setTimeout(() => {
+            if (fakeScreen && fakeScreen.parentNode) fakeScreen.parentNode.removeChild(fakeScreen);
+            if (fakeStyles && fakeStyles.parentNode) fakeStyles.parentNode.removeChild(fakeStyles);
+          }, 250);
+        }
+      } catch(e) {}
+
+      try {
+        document.title = (function(){try{return localStorage.getItem('app-cloaking-title');}catch(e){return null;}})() || "Sigma Games";
+        const favicon = document.getElementById('dynamic-favicon');
+        if (favicon) {
+          favicon.href = (function(){try{return localStorage.getItem('app-cloaking-icon');}catch(e){return null;}})() || '/static.svg';
+          favicon.type = 'image/svg+xml';
+        }
+      } catch(e) {}
     }
 
+    // Dismiss on timeout (3s)
     setTimeout(dismissFakeScreen, 3000);
 
-    const fakeScreenEl = document.getElementById('fake-login-screen');
-    if (fakeScreenEl) {
-      fakeScreenEl.addEventListener('click', (e) => {
-        dismissFakeScreen();
-      });
+    // Dismiss on click or any keypress
+    window.addEventListener('click', dismissFakeScreen, { once: true });
+    window.addEventListener('keydown', dismissFakeScreen, { once: true });
+    window.addEventListener('touchstart', dismissFakeScreen, { once: true });
+
+    try {
+      initDotBackground();
+    } catch(e) {
+      console.warn("Background canvas error", e);
     }
+
+    try {
+      startTerminalBoot();
+    } catch(e) {
+      console.warn("Terminal boot error", e);
+    }
+
+    try {
+      if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        lucide.createIcons();
+      }
+    } catch(e) {}
   }
+
+  // Self-executing safeguard: dismiss fake screen after 3s even if initApp is blocked or delayed
+  setTimeout(function() {
+    try {
+      var scr = document.getElementById('fake-login-screen');
+      var sty = document.getElementById('fake-login-styles');
+      if (scr) {
+        scr.style.opacity = '0';
+        scr.style.pointerEvents = 'none';
+        setTimeout(function(){ if (scr && scr.parentNode) scr.parentNode.removeChild(scr); }, 300);
+      }
+      if (sty && sty.parentNode) sty.parentNode.removeChild(sty);
+    } catch(e) {}
+  }, 3000);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initApp);
