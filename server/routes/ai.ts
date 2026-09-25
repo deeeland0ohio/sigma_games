@@ -70,11 +70,23 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Groq Verified Chat Models Catalog
 export const GROQ_FALLBACK_MODELS: ModelInfo[] = [
-  { id: "groq/compound", label: "Groq Compound (Recommended)", owned_by: "groq", description: "Groq high-intelligence compound reasoning system. Ultra-fast and highly capable." },
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Recommended)", owned_by: "meta", description: "Flagship open weights model with state-of-the-art general intelligence, math, and coding." },
+  { id: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 Distill 70B", owned_by: "deepseek", description: "Advanced chain-of-thought reasoning model distilled from DeepSeek R1." },
+  { id: "deepseek-r1-distill-qwen-32b", label: "DeepSeek R1 Distill Qwen 32B", owned_by: "deepseek", description: "Fast mathematical and logical reasoning model." },
+  { id: "llama-3.1-70b-versatile", label: "Llama 3.1 70B Versatile", owned_by: "meta", description: "Large-scale intelligence with deep contextual understanding." },
+  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." },
+  { id: "gemma2-9b-it", label: "Gemma 2 9B Instruct", owned_by: "google", description: "Google open weights model optimized for structured knowledge and reasoning." },
+  { id: "mixtral-8x7b-32768", label: "Mixtral 8x7B (32k Context)", owned_by: "mistralai", description: "High-speed mixture-of-experts model with large context window." },
+  { id: "mistral-saba-24b", label: "Mistral Saba 24B", owned_by: "mistralai", description: "Powerful multilingual and multi-turn conversational model." },
+  { id: "qwen-2.5-coder-32b", label: "Qwen 2.5 Coder 32B", owned_by: "qwen", description: "State-of-the-art code generation and algorithmic reasoning." },
+  { id: "qwen-2.5-32b", label: "Qwen 2.5 32B", owned_by: "qwen", description: "Advanced reasoning, comprehension, and math powerhouse." },
+  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", owned_by: "qwen", description: "Multimodal and multilingual open model with strong analytical reasoning." },
+  { id: "llama3-70b-8192", label: "Llama 3 70B", owned_by: "meta", description: "Meta Llama 3 70B high performance model." },
+  { id: "llama3-8b-8192", label: "Llama 3 8B", owned_by: "meta", description: "Meta Llama 3 8B fast model." },
+  { id: "groq/compound", label: "Groq Compound", owned_by: "groq", description: "Groq high-intelligence compound reasoning system. Ultra-fast and highly capable." },
   { id: "openai/gpt-oss-120b", label: "GPT OSS 120B", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning accelerated on Groq LPUs." },
   { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput on Groq." },
   { id: "groq/compound-mini", label: "Groq Compound Mini", owned_by: "groq", description: "Lightweight compound AI model for snappy, instant responses." },
-  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", owned_by: "qwen", description: "Multimodal and multilingual open model with strong analytical reasoning." },
   { id: "allam-2-7b", label: "ALLaM 2 7B", owned_by: "sdaia", description: "Bilingual Arabic and English language model." }
 ];
 
@@ -142,11 +154,12 @@ async function getGroqModels(groqKey: string): Promise<ModelInfo[]> {
 
             // Prioritize recommended model
             cachedGroqModels.sort((a, b) => {
-              if (a.id === "groq/compound") return -1;
-              if (b.id === "groq/compound") return 1;
-              if (a.id === "openai/gpt-oss-120b") return -1;
-              if (b.id === "openai/gpt-oss-120b") return 1;
-              return a.label.localeCompare(b.label);
+              const orderA = GROQ_FALLBACK_MODELS.findIndex(f => f.id === a.id);
+              const orderB = GROQ_FALLBACK_MODELS.findIndex(f => f.id === b.id);
+              if (orderA !== -1 && orderB !== -1) return orderA - orderB;
+              if (orderA !== -1) return -1;
+              if (orderB !== -1) return 1;
+              return a.label?.localeCompare(b.label || "") || 0;
             });
 
             lastGroqCacheTime = now;
@@ -165,7 +178,7 @@ async function getGroqModels(groqKey: string): Promise<ModelInfo[]> {
 // Helper to fetch Emis models
 async function getEmisModels(userKey: string): Promise<ModelInfo[]> {
   const now = Date.now();
-  if (cachedEmisModels && (now - lastEmisCacheTime < CACHE_TTL_MS) && userKey === DEFAULT_EMIS_KEY) {
+  if (cachedEmisModels && (now - lastEmisCacheTime < CACHE_TTL_MS) && userKey === resolveEmisKey()) {
     return cachedEmisModels;
   }
 
