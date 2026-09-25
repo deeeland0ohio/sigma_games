@@ -408,14 +408,6 @@
     "iframe": true
   },
   {
-    "title": "Basket Bros",
-    "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
-    "description": "Online multiplayer basketball! Dunk all over your bros!",
-    "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/basket-bros/index.html",
-    "category": "Arcade",
-    "iframe": true
-  },
-  {
     "title": "Clover Pit",
     "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
     "description": "A psychological horror/adventure game by Panik Arcade.",
@@ -640,22 +632,6 @@
     "iframe": true
   },
   {
-    "title": "Football Bros",
-    "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
-    "description": "Online multiplayer football! Bone crushing hits, long bombs, and tons more!",
-    "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/football-bros/index.html",
-    "category": "Arcade",
-    "iframe": true
-  },
-  {
-    "title": "Baseball Bros",
-    "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
-    "description": "Online multiplayer baseball! Strikeouts, steals, and grand slams! Hit Nukes!",
-    "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/baseball-bros/index.html",
-    "category": "Arcade",
-    "iframe": true
-  },
-  {
     "title": "Temple Run 2",
     "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
     "description": "Run, jump, turn and slide your way through the dangerous temple.",
@@ -781,14 +757,6 @@
     "description": "A highly competitive third-person shooter and building simulator. Practice your 90s and battle opponents!",
     "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/1v1-lol/index.html",
     "category": "1v1.lol",
-    "iframe": true
-  },
-  {
-    "title": "Kart Bros",
-    "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
-    "description": "A free kart racing game packed with wild antics! Drift around tracks and hurl powerups with friends.",
-    "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/kart-bros/index.html",
-    "category": "Bros",
     "iframe": true
   },
   {
@@ -984,14 +952,6 @@
     "iframe": true
   },
   {
-    "title": "Wrestle Bros",
-    "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
-    "description": "Online multiplayer PRO WRESTLING! Beat up your bros!",
-    "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/wrestle-bros/index.html",
-    "category": "Arcade",
-    "iframe": true
-  },
-  {
     "title": "Slope 3",
     "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
     "description": "Drive a ball down a never-ending slope, avoid obstacles, and survive as long as possible.",
@@ -1005,14 +965,6 @@
     "description": "Ride down a snowy mountain, dodge obstacles, and collect gifts in this fast-paced 3D snowboarding game.",
     "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/snow-rider-3d/index.html",
     "category": "Arcade",
-    "iframe": true
-  },
-  {
-    "title": "Soccer Bros",
-    "img": "https://cdn.jsdelivr.net/gh/deeeland0ohio/sigma_games_favicon@main/sigma-favicon.png",
-    "description": "Fun, fast-paced 1 on 1 soccer game with lots of action! Pick from a variety of characters and let the play begin.",
-    "path": "https://cdn.jsdelivr.net/gh/deeeland0ohio/Sigma-Games@main/public/games/soccer-bros/index.html",
-    "category": "Bros",
     "iframe": true
   },
   {

@@ -3,16 +3,21 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Bot, Send, Plus, Trash2, Copy, Check, RotateCcw, 
   ChevronDown, Square, MessageSquare, Download, X, Sparkles, ArrowDown,
-  Zap, Globe, AlertTriangle, Key
+  Zap, Globe, AlertTriangle
 } from 'lucide-react';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import katex from 'katex';
+import 'katex/dist/katex.min.css';
 import PageLayout from '../components/PageLayout';
 import { CodeBlock } from './CodeBlock';
 import { MediaBlock } from './MediaBlock';
 import { useThemeColors } from '../context/ThemeContext';
 import { storage } from '../utils/storage';
-import ApiKeyModal from '../components/ApiKeyModal';
-import { getAiRequestHeaders, getCustomGroqKey, getCustomGeminiKey } from '../utils/aiKeys';
+import { getAiRequestHeaders } from '../utils/aiKeys';
+import { preprocessMath } from '../utils/mathUtils';
 
 export type AIProvider = 'groq' | 'emis';
 
@@ -71,21 +76,33 @@ Site Information (ONLY reference these if the user explicitly asks about them):
   9. Hydra, Lumin, and Chicken King's Vault collections.
 - Total Games, if asked about is about 10.4k.
 
-Always format links in clean Markdown. For all other queries, answer directly without extra site trivia.`;
+Always format links and code in clean Markdown. For all other queries, answer directly without extra site trivia.`;
 }
 
 export const GROQ_DEFAULT_MODELS: ModelInfo[] = [
-  { id: 'groq/compound', label: 'Groq Compound (Recommended)', owned_by: 'groq', description: 'Groq high-intelligence compound reasoning system. Ultra-fast and highly capable.' },
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B Versatile (Recommended)', owned_by: 'meta', description: 'Flagship open weights model with state-of-the-art general intelligence, math, and coding.' },
+  { id: 'deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 Distill 70B', owned_by: 'deepseek', description: 'Advanced chain-of-thought reasoning model distilled from DeepSeek R1.' },
+  { id: 'deepseek-r1-distill-qwen-32b', label: 'DeepSeek R1 Distill Qwen 32B', owned_by: 'deepseek', description: 'Fast mathematical and logical reasoning model.' },
+  { id: 'llama-3.1-70b-versatile', label: 'Llama 3.1 70B Versatile', owned_by: 'meta', description: 'Large-scale intelligence with deep contextual understanding.' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B Instant', owned_by: 'meta', description: 'Ultra-low latency model for blazing fast responses.' },
+  { id: 'gemma2-9b-it', label: 'Gemma 2 9B Instruct', owned_by: 'google', description: 'Google open weights model optimized for structured knowledge and reasoning.' },
+  { id: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B (32k Context)', owned_by: 'mistralai', description: 'High-speed mixture-of-experts model with large context window.' },
+  { id: 'mistral-saba-24b', label: 'Mistral Saba 24B', owned_by: 'mistralai', description: 'Powerful multilingual and multi-turn conversational model.' },
+  { id: 'qwen-2.5-coder-32b', label: 'Qwen 2.5 Coder 32B', owned_by: 'qwen', description: 'State-of-the-art code generation and algorithmic reasoning.' },
+  { id: 'qwen-2.5-32b', label: 'Qwen 2.5 32B', owned_by: 'qwen', description: 'Advanced reasoning, comprehension, and math powerhouse.' },
+  { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', owned_by: 'qwen', description: 'Multimodal and multilingual open model with strong analytical reasoning.' },
+  { id: 'llama3-70b-8192', label: 'Llama 3 70B', owned_by: 'meta', description: 'Meta Llama 3 70B high performance model.' },
+  { id: 'llama3-8b-8192', label: 'Llama 3 8B', owned_by: 'meta', description: 'Meta Llama 3 8B fast model.' },
+  { id: 'groq/compound', label: 'Groq Compound', owned_by: 'groq', description: 'Groq high-intelligence compound reasoning system. Ultra-fast and highly capable.' },
   { id: 'openai/gpt-oss-120b', label: 'GPT OSS 120B', owned_by: 'openai', description: 'Flagship 120B open weights model with chain-of-thought reasoning accelerated on Groq LPUs.' },
   { id: 'openai/gpt-oss-20b', label: 'GPT OSS 20B', owned_by: 'openai', description: 'Fast, efficient 20B reasoning model with high throughput on Groq.' },
   { id: 'groq/compound-mini', label: 'Groq Compound Mini', owned_by: 'groq', description: 'Lightweight compound AI model for snappy, instant responses.' },
-  { id: 'qwen/qwen3.8-27b', label: 'Qwen 3.8 27B', owned_by: 'qwen', description: 'Multimodal and multilingual open model with strong analytical reasoning.' },
   { id: 'allam-2-7b', label: 'ALLaM 2 7B', owned_by: 'sdaia', description: 'Bilingual Arabic and English language model.' }
 ];
 
 function sanitizeGroqModel(m: string | null | undefined): string {
-  if (!m || m === 'llama-3.3-70b-versatile' || m.includes('prompt-guard') || m.includes('safeguard')) {
-    return 'groq/compound';
+  if (!m || m.includes('prompt-guard') || m.includes('safeguard')) {
+    return 'llama-3.3-70b-versatile';
   }
   return m;
 }
@@ -136,7 +153,6 @@ export default function AiChat() {
   // Model Catalogs for each provider
   const [groqModels, setGroqModels] = useState<ModelInfo[]>(GROQ_DEFAULT_MODELS);
   const [emisModels, setEmisModels] = useState<ModelInfo[]>([]);
-  const [hasGroqKey, setHasGroqKey] = useState<boolean>(false);
 
   // Active models per provider (Defaults to Claude Fable 5.1 on Emis)
   const [groqModel, setGroqModel] = useState<string>(() => {
@@ -250,7 +266,6 @@ export default function AiChat() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isUserScrolledUp, setIsUserScrolledUp] = useState(false);
-  const [isApiKeyModalOpen, setIsApiKeyModalOpen] = useState(false);
   const isUserScrolledUpRef = useRef(false);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -297,10 +312,15 @@ export default function AiChat() {
       if (res.ok) {
         const data = await res.json();
         if (Array.isArray(data.groq) && data.groq.length > 0) {
-          setGroqModels(data.groq);
-          const validGroqIds = new Set(data.groq.map((m: any) => m.id));
+          const apiIds = new Set(data.groq.map((m: any) => m.id));
+          const mergedGroq = [
+            ...data.groq,
+            ...GROQ_DEFAULT_MODELS.filter(m => !apiIds.has(m.id))
+          ];
+          setGroqModels(mergedGroq);
+          const validGroqIds = new Set(mergedGroq.map((m: any) => m.id));
           if (!validGroqIds.has(groqModel)) {
-            const fallback = data.groq[0]?.id || 'groq/compound';
+            const fallback = mergedGroq[0]?.id || 'llama-3.3-70b-versatile';
             setGroqModel(fallback);
             storage.setItem('ai_groq_model', fallback);
           }
@@ -313,9 +333,6 @@ export default function AiChat() {
             setEmisModel(fallback);
             storage.setItem('ai_emis_model', fallback);
           }
-        }
-        if (typeof data.hasGroqKey === 'boolean') {
-          setHasGroqKey(data.hasGroqKey || Boolean(getCustomGroqKey()));
         }
 
         // Detect if Emis has run out or reached verification limit
@@ -362,29 +379,32 @@ export default function AiChat() {
 
   const prevSessionIdRef = useRef(activeSessionId);
 
-  // Auto-scroll messages ONLY if user hasn't scrolled up
+  // Auto-scroll messages smoothly without fighting streaming frames
   useEffect(() => {
     if (prevSessionIdRef.current !== activeSessionId) {
       prevSessionIdRef.current = activeSessionId;
       isUserScrolledUpRef.current = false;
       setIsUserScrolledUp(false);
       if (scrollContainerRef.current) {
-        scrollContainerRef.current.scrollTo({
-          top: scrollContainerRef.current.scrollHeight,
-          behavior: 'instant'
-        });
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
       }
       return;
     }
 
-    if (!isUserScrolledUpRef.current) {
-      if (scrollContainerRef.current) {
+    if (!isUserScrolledUpRef.current && scrollContainerRef.current) {
+      if (isGenerating) {
+        // Direct RAF pinning during active streaming prevents oscillation and browser vibration
+        requestAnimationFrame(() => {
+          if (scrollContainerRef.current && !isUserScrolledUpRef.current) {
+            scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+          }
+        });
+      } else {
+        // Smooth scroll when finished or when new complete message arrives
         scrollContainerRef.current.scrollTo({
           top: scrollContainerRef.current.scrollHeight,
           behavior: 'smooth'
         });
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }
     }
   }, [activeSession?.messages, isGenerating, activeSessionId]);
@@ -1264,16 +1284,6 @@ export default function AiChat() {
 
               <div className="flex items-center gap-1.5">
                 <button
-                  type="button"
-                  onClick={() => setIsApiKeyModalOpen(true)}
-                  className="px-2.5 py-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-800 text-zinc-300 hover:text-white transition-all text-xs font-semibold flex items-center gap-1.5 border border-zinc-700/60 shadow-sm cursor-pointer"
-                  title="Configure Groq / Gemini API Keys"
-                >
-                  <Key size={13} className="text-emerald-400" />
-                  <span className="hidden sm:inline">API Keys</span>
-                </button>
-
-                <button
                   onClick={exportChat}
                   disabled={!activeSession || activeSession.messages.length === 0}
                   className="p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors disabled:opacity-40"
@@ -1385,12 +1395,48 @@ export default function AiChat() {
                           : 'bg-zinc-900/90 border border-zinc-800 text-zinc-100 rounded-tl-none shadow-xl'}
                       `}>
                         {isUser ? (
-                          <div className="whitespace-pre-wrap break-words">{msg.content}</div>
+                          <div className="break-words">
+                            <Markdown
+                              remarkPlugins={[remarkGfm, remarkMath]}
+                              rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
+                              components={{
+                                p(props) {
+                                  return <p className="m-0 whitespace-pre-wrap font-medium" {...props} />;
+                                }
+                              }}
+                            >
+                              {preprocessMath(msg.content)}
+                            </Markdown>
+                          </div>
                         ) : (
                           <div className="prose prose-invert prose-sm max-w-none break-words">
                             {msg.content ? (
                               <Markdown
+                                remarkPlugins={[remarkGfm, remarkMath]}
+                                rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]}
                                 components={{
+                                  p(props) {
+                                    const { children } = props;
+                                    if (typeof children === 'string') {
+                                      const trimmed = children.trim();
+                                      if (trimmed.startsWith('\\begin{') || (trimmed.startsWith('\\boxed') && trimmed.endsWith('}'))) {
+                                        try {
+                                          const rendered = katex.renderToString(trimmed, {
+                                            displayMode: true,
+                                            throwOnError: false,
+                                            strict: false
+                                          });
+                                          return (
+                                            <div 
+                                              className="katex-display my-3"
+                                              dangerouslySetInnerHTML={{ __html: rendered }}
+                                            />
+                                          );
+                                        } catch (e) {}
+                                      }
+                                    }
+                                    return <p className="my-2">{children}</p>;
+                                  },
                                   code(props) {
                                     const { children, className, node, ...rest } = props;
                                     const match = /language-(\w+)/.exec(className || '');
@@ -1460,7 +1506,7 @@ export default function AiChat() {
                                   }
                                 }}
                               >
-                                {msg.content}
+                                {preprocessMath(msg.content)}
                               </Markdown>
                             ) : isGenerating && index === activeSession.messages.length - 1 ? (
                               <div className="flex items-center gap-2 text-zinc-400 py-1">
@@ -1560,12 +1606,6 @@ export default function AiChat() {
         </div>
 
       </div>
-
-      <ApiKeyModal
-        isOpen={isApiKeyModalOpen}
-        onClose={() => setIsApiKeyModalOpen(false)}
-        onKeysUpdated={fetchModels}
-      />
     </PageLayout>
   );
 }

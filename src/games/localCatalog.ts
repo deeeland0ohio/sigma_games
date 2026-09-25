@@ -142,25 +142,6 @@ export const bankRobbery: Game = {
   popularity: 70,
 };
 
-export const baseballBros: Game = {
-  id: "baseball-bros",
-  title: "Baseball Bros",
-  description: "Online multiplayer baseball! Strikeouts, steals, and grand slams! Hit Nukes!",
-  icon: Trophy,
-  type: "iframe",
-  url: "/games/baseball-bros/index.html",
-  popularity: 85,
-};
-
-export const basketBros: Game = {
-  id: 'basket-bros',
-  title: 'Basket Bros',
-  description: 'Online multiplayer basketball! Dunk all over your bros!',
-  icon: Dribbble,
-  type: 'iframe',
-  url: '/games/basket-bros/index.html',
-  popularity: 85,
-};
 
 export const basketRandom: Game = {
   id: 'basket-random',
@@ -629,16 +610,6 @@ export const fnfVsWhitty: Game = {
   keywords: ["fnf", "funkin", "rhythm", "whitty", "mod"],
 };
 
-export const footballBros: Game = {
-  id: "football-bros",
-  title: "Football Bros",
-  description:
-    "Online multiplayer football! Bone crushing hits, long bombs, and tons more!",
-  icon: Trophy,
-  type: "iframe",
-  url: "/games/football-bros/index.html",
-  popularity: 85,
-};
 
 export const fridayNightFunkin: Game = {
   id: 'friday-night-funkin',
@@ -851,17 +822,6 @@ export const ironLung: Game = {
   popularity: 85
 };
 
-export const kartBros: Game = {
-  id: 'kart-bros',
-  title: "Kart Bros",
-  description: "A free kart racing game packed with wild antics! Drift around tracks and hurl powerups with friends.",
-  icon: Car,
-  type: 'iframe',
-  url: '/games/kart-bros/index.html',
-  popularity: 94,
-  series: "Bros",
-  keywords: ["kart", "racing", "multiplayer", "io", "driving", "bros"],
-};
 
 export const meteor60Seconds: Game = {
   id: 'meteor-60-seconds',
@@ -1109,17 +1069,6 @@ export const snowRider3d: Game = {
   popularity: 85,
 };
 
-export const soccerBros: Game = {
-  id: 'soccer-bros',
-  title: "Soccer Bros",
-  description: "Fun, fast-paced 1 on 1 soccer game with lots of action! Pick from a variety of characters and let the play begin.",
-  icon: Gamepad2,
-  type: 'iframe',
-  url: '/games/soccer-bros/index.html',
-  popularity: 85,
-  series: "Bros",
-  keywords: ["soccer", "bros", "sports", "multiplayer", "football"],
-};
 
 export const soccerRandom: Game = {
   id: 'soccer-random',
@@ -1420,15 +1369,6 @@ export const webfishing: Game = {
   popularity: 92,
 };
 
-export const wrestleBros: Game = {
-  id: 'wrestle-bros',
-  title: 'Wrestle Bros',
-  description: 'Online multiplayer PRO WRESTLING! Beat up your bros!',
-  icon: Users,
-  type: 'iframe',
-  url: '/games/wrestle-bros/index.html',
-  popularity: 72,
-};
 
 export const allGames: Game[] = [
   gtaViceCity,
@@ -1482,7 +1422,6 @@ export const allGames: Game[] = [
   polyTrack,
   gladihoppers,
   badPiggies,
-  basketBros,
   cloverPit,
   clusterRush,
   crazyCars,
@@ -1511,8 +1450,6 @@ export const allGames: Game[] = [
   boxingRandom,
   rooftopSnipers,
   rooftopSnipers2,
-  footballBros,
-  baseballBros,
   templeRun2,
   retroBowl,
   retroBowlCollege,
@@ -1529,7 +1466,6 @@ export const allGames: Game[] = [
   driftBoss,
   tenMinutesUntilDawn,
   oneVOneLol,
-  kartBros,
   iceDodo,
   abaf,
   mountainBikeRacer,
@@ -1554,10 +1490,8 @@ export const allGames: Game[] = [
   funnyShooter2,
   funnyBattleSimulator,
   funnyBattleSimulator2,
-  wrestleBros,
   slope3,
   snowRider3d,
-  soccerBros,
   stickManHook,
   tunnelRush,
   scpRefinarium,
