@@ -31,8 +31,7 @@ export default function FloatingMusicWidget() {
     currentTime,
     duration,
     seek,
-    isLoadingAudio,
-    currentLyricLine
+    isLoadingAudio
   } = useMusic();
   const colors = useThemeColors();
   const navigate = useNavigate();
@@ -92,11 +91,6 @@ export default function FloatingMusicWidget() {
               {currentTrack.name}
             </p>
             <p className="text-xs text-zinc-400 truncate mt-0.5">{currentTrack.artist}</p>
-            {currentLyricLine && (
-              <p className="text-[11px] text-emerald-400 truncate font-mono mt-0.5">
-                {currentLyricLine}
-              </p>
-            )}
           </div>
 
           {/* Player controls */}

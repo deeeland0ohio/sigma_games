@@ -17,6 +17,7 @@ apiRouter.use(contentLoaderRouter);
 apiRouter.use(chatRouter);
 apiRouter.use(gamesRouter);
 apiRouter.use(aiRouter);
+apiRouter.use("/music", musicRouter);
 apiRouter.use(musicRouter);
 
 export default apiRouter;

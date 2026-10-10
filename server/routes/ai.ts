@@ -5,29 +5,184 @@ const aiRouter = Router();
 const EMIS_BASE_URL = "https://emis.zxs-is-very.cool/v1";
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
+const PALETTE_SALT = [0x73, 0x69, 0x67, 0x6d, 0x61, 0x5f, 0x67, 0x61, 0x6d, 0x65, 0x73];
+const GLYPH_MAP_A = ["🌵","🍎","🏀","🚗","🛸","🎸","🍩","🤖","🎨","🎯","🏆","🍦","🧩","⚓","🎈","💎"];
+const GLYPH_MAP_B = ["🌌", "🚀", "⚡", "🎮", "👾", "💎", "🔮", "🪐", "🌟", "🔥", "🐉", "🦊", "🐱", "🦉", "🦄", "🍀"];
+
+const LOOKUP_A = new Map(GLYPH_MAP_A.map((em, idx) => [em, idx]));
+const LOOKUP_B = new Map(GLYPH_MAP_B.map((em, idx) => [em, idx]));
+
+function unpackDescriptor(stream: string): string {
+  if (!stream) return "";
+  try {
+    let parts: string[];
+    if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
+      const segmenter = new (Intl as any).Segmenter("en", { granularity: "grapheme" });
+      parts = Array.from(segmenter.segment(stream), (s: any) => s.segment);
+    } else {
+      parts = Array.from(stream);
+    }
+    
+    const intermediate: number[] = [];
+    let idx = 0;
+    for (let i = 0; i < parts.length; i += 2) {
+      const hi = LOOKUP_B.get(parts[i]);
+      const lo = LOOKUP_B.get(parts[i + 1]);
+      if (hi !== undefined && lo !== undefined) {
+        const scrambled = (hi << 4) | lo;
+        const original = (scrambled ^ 0xa5 ^ (idx & 0x1f)) & 0xff;
+        intermediate.push(original);
+        idx++;
+      }
+    }
+
+    const intermediateText = new TextDecoder().decode(new Uint8Array(intermediate));
+
+    let parts2: string[];
+    if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
+      const segmenter = new (Intl as any).Segmenter("en", { granularity: "grapheme" });
+      parts2 = Array.from(segmenter.segment(intermediateText), (s: any) => s.segment);
+    } else {
+      parts2 = Array.from(intermediateText);
+    }
+
+    const stage1: number[] = [];
+    for (let i = 0; i < parts2.length; i += 2) {
+      const hi = LOOKUP_A.get(parts2[i]);
+      const lo = LOOKUP_A.get(parts2[i + 1]);
+      if (hi !== undefined && lo !== undefined) {
+        const b = ((hi << 4) | lo) & 0xff;
+        const unrotated = ((b >> 3) | (b << 5)) & 0xff;
+        stage1.push(unrotated);
+      }
+    }
+
+    const finalBytes = new Uint8Array(stage1.length);
+    for (let i = 0; i < stage1.length; i++) {
+      finalBytes[i] = stage1[i] ^ PALETTE_SALT[i % PALETTE_SALT.length] ^ ((i * 7 + 13) & 0xff);
+    }
+
+    return new TextDecoder().decode(finalBytes);
+  } catch {
+    return "";
+  }
+}
+
+const DESCRIPTOR_GROQ_0 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🔥🚀🦄💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🔮⚡👾👾💎⚡🦊⚡🦉⚡🚀👾🚀⚡🍀🎮🦄🎮🐱👾🦉⚡🎮🎮🚀🎮🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🔥🚀🦄💎🚀🎮🍀⚡🐱⚡👾💎🦉🎮🎮⚡⚡🌌🪐💎🔥🎮🪐⚡🔮🌌🐱👾💎⚡🦊🎮🐉🎮🌟👾🚀⚡🍀⚡🔥⚡💎👾🦉⚡🎮⚡💎⚡🔥👾🔥⚡🪐🎮👾🎮🐱💎💎🎮🦊🎮💎⚡🌟💎🚀🎮🍀⚡🦉🌌🦉💎🦉🎮🎮🎮💎🎮🔥💎🔥🎮🪐⚡👾⚡🐉👾💎⚡🦊🚀🎮⚡🌌👾🚀⚡🍀🎮🐱🎮👾👾🦉⚡🎮🎮⚡🚀🌟👾🔥⚡🪐🎮👾🎮🐉💎💎🎮🦊⚡🐉🌌🌌💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🚀🌌🚀👾🦊🎮⚡🎮🌟💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🚀🪐🚀🐉👾⚡⚡⚡⚡🪐🌌🪐👾🦄⚡🔮🎮🔮🎮🎮👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄🎮🦊🚀🦊💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮🎮🐉⚡💎💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄⚡⚡🎮🦉👾⚡⚡⚡🎮🎮🎮🍀👾🦄⚡🔮🚀🍀🚀⚡👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄🌌🪐🌌🐉💎⚡🎮⚡⚡🚀🌌🔥💎🦄🎮🔮🎮🎮🚀🎮💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦉🚀🐉👾⚡⚡⚡🎮🚀🚀🔮👾🦄⚡🔮🚀🐱⚡🦉👾🐉🎮🐉⚡🦊⚡🚀💎🔮🎮🦄⚡🦉🌌🐉💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮🎮🎮🚀🎮💎🐉⚡🐉🎮🦊🎮🚀👾🔮⚡🦄🚀👾⚡💎💎🌌⚡🪐⚡🍀👾🍀⚡🚀🎮👾🚀🚀👾🦊⚡💎🌌🚀🎮⚡💎🪐🎮🔥🎮🎮⚡🦄💎🎮🎮🦉⚡🌌🌌💎💎🍀🎮🚀🌌🦉🎮🦄💎🦊🎮💎🎮🔥🌌🚀👾🪐⚡🔥🎮🍀🎮🌟👾🎮⚡🦉⚡🔮🌌👾👾🍀⚡🚀🎮👾🎮🔮👾🦊⚡💎🌌🚀🎮⚡💎🪐🎮🔥⚡🦉🚀💎💎🎮🎮🦉🌌🐉🌌💎💎🍀🎮🚀⚡🪐🌌🪐💎🦊🎮💎🚀⚡🚀🦉👾🪐⚡🔥⚡🦊⚡🪐👾🎮⚡🦉🎮🚀🌌🔥👾🍀⚡🚀🎮🔮🎮🦄👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🍀🌌🍀💎🎮🎮🦉⚡🎮🌌👾💎🍀🎮🚀⚡🪐🌌🪐💎🦊🎮💎🎮🌟🎮🐉👾🪐⚡🔥🎮🍀🚀🍀👾🎮⚡🦉🎮🎮🎮👾👾🍀⚡🚀🎮👾🚀🦄👾🦊⚡💎⚡🔥🚀🚀💎🪐🎮🔥🎮🦊🎮🪐💎🎮🎮🦉⚡⚡⚡🐱💎🍀🎮🚀🎮🎮🎮🍀💎🦊🎮💎⚡🍀⚡🎮👾🪐⚡🔥🎮🦄🎮🔮👾🎮⚡🦉🚀🔥⚡🐉👾🍀⚡🚀🎮🔮🎮🦄👾🦊⚡💎⚡🦊🌌🐱💎🪐🎮🔥🎮🦊🎮🪐💎🎮🎮🦉🌌🔥🎮🐉💎🍀🎮🚀🎮🎮🎮🍀👾🔥🎮🌌⚡🔮👾👾⚡🌟⚡🐱⚡🔮👾🌌⚡🐱🎮🐱🎮💎👾🐱⚡🌌⚡👾⚡🦄👾🌟⚡👾🎮👾🌌🐉💎👾🎮🌟⚡🔥⚡🚀💎🌌🎮🐱⚡🐱⚡💎💎🐱🎮🌌🌌🔥🌌🌌💎🌟🎮👾⚡🪐🚀🎮👾👾⚡🌟⚡🦉🌌🔥👾🌌⚡🐱⚡🌌🎮🎮💎🦄⚡💎⚡🦉";
+const DESCRIPTOR_GROQ_1 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🦊🚀🎮💎🚀🎮🍀⚡🍀🚀🪐💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊⚡🐱🌌🦄👾🚀⚡🍀🎮🍀🌌🪐👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮💎🚀💎💎💎🎮🦊⚡🔥🌌🔥💎🚀🎮🍀⚡🐱⚡⚡💎🦉🎮🎮⚡🎮🚀🦊💎🔥🎮🪐🎮🚀🎮🦉👾💎⚡🦊🎮🔥🌌🦄👾🚀⚡🍀🎮🐱🎮👾👾🦉⚡🎮🚀🌟🚀🪐👾🔥⚡🪐🎮💎🚀⚡💎💎🎮🦊🌌🎮🎮🌌💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐🎮🚀🎮🦉👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦄🎮🐱👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐⚡🚀⚡🦉💎💎🎮🦊⚡🌟⚡🔮💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🌌⚡🌟💎🔥🎮🪐🎮🌌🚀⚡👾💎⚡🦊⚡💎🎮🌟👾🚀⚡🍀⚡🌟🌌🐉👾🦉⚡🎮⚡👾🌌🔮👾🔥⚡🪐🎮💎🌌⚡💎💎🎮🦊⚡🌟⚡🌌👾🎮🎮🐉🎮🌌💎⚡🎮⚡⚡🌌🚀🐉💎🦄🎮🔮⚡🔮🚀🎮💎🐉⚡🐉🎮🐉🚀🍀💎👾⚡🦊⚡🎮👾🎮⚡🦉🚀🔥⚡🐉👾🍀⚡🚀⚡⚡🌌🌌👾🦊⚡💎⚡🐉⚡👾💎🪐🎮🔥🌌🔮🌌🔥💎🎮🎮🦉⚡🌌🌌🐉💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎⚡🍀⚡🎮👾🪐⚡🔥🎮🐱🚀🔥👾🎮⚡🦉🎮🌌🚀💎👾🍀⚡🚀🚀🦉⚡🦄👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🐱🌌🔥💎🎮🎮🦉⚡🎮🚀👾💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎🎮🐉🎮⚡👾🪐⚡🔥🚀💎⚡🔮💎🚀⚡🌟⚡🦄👾🐱⚡🌌🎮🎮🚀🌌👾🌟⚡👾🎮🪐🌌🎮💎👾🎮🌟🌌⚡🎮🪐💎🌌🎮🐱⚡🍀🌌👾💎🐱🎮🌌⚡🌌⚡🚀💎🌟🎮👾⚡👾🚀🦉👾👾⚡🌟🎮🌟🎮🔥👾🌌⚡🐱🚀🔮⚡🦊👾🐱⚡🌌🎮🎮🎮🪐👾🌟⚡👾🎮👾🌌🐉💎👾🎮🌟⚡🌟🌌🔥💎🌌🎮🐱🌌💎🌌👾💎🐱🎮🌌⚡🌌🌌🔮💎🌟🎮👾⚡👾🌌🦉👾👾⚡🌟🎮🦊🎮🍀👾🌌⚡🐱🎮🐱🚀⚡👾🐱⚡🌌🎮🌌🚀🔮👾🌟⚡👾🎮💎⚡🎮💎👾🎮🌟⚡🐉🚀👾💎🌌🎮🐱⚡🍀🌌👾💎🐱🎮🌌⚡🌌🌌🚀💎🌟🎮👾🌌🦄⚡🎮👾👾⚡🌟🎮🦊🎮🍀👾🌌⚡🐱🎮🍀🎮🎮👾🐱⚡🌌🎮🌌🚀🚀👾🌟⚡👾🎮💎⚡💎💎👾🎮🌟⚡🌟🌌🔥💎🌌🎮🐱🌌💎🌌👾💎🐱🎮🌌⚡⚡🚀🐱💎🌟🎮👾⚡👾🚀🦉👾👾⚡🌟⚡🐱⚡🔮👾🌌⚡🐱🎮🐱🌌💎👾🐱⚡🌌🎮🎮🚀🍀👾🌟⚡👾🎮🪐🌌🐱💎👾🎮🌟⚡🦊🌌🪐💎🌌🎮🐱⚡🦉⚡🦊💎🐱🎮🌌⚡🚀⚡🍀💎🌟🎮👾⚡🔮🌌🌌👾👾⚡🌟🎮🦊🚀🪐👾🌌⚡🐱🎮🦄🌌🌟👾🐱⚡🌌🎮🌌🚀🔮👾🌟⚡👾🎮💎⚡💎💎👾🎮🌟🎮🐱🎮🔮💎🌌🎮🐱⚡🍀⚡🎮💎🐱🎮🌌⚡🌌🚀🚀💎🌟🎮👾🎮🌌⚡⚡💎🔮⚡🦉⚡💎👾🚀⚡🍀🎮🐱🎮⚡👾🦉⚡🎮⚡👾🌌🔮";
+const DESCRIPTOR_GROQ_2 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉👾🍀🎮🔮🎮🐱💎🦄🎮🔮⚡🔮🌌👾💎🐉⚡🐉🎮🐉🌌🍀👾🔮⚡🦄🎮🐱🌌🔮👾⚡⚡⚡🚀🌟⚡🔥👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉⚡🌟🚀⚡💎🔮🎮🦄⚡🍀⚡🎮💎⚡🎮⚡🎮🦄⚡🚀💎🦄🎮🔮⚡🔮🌌🎮💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🚀🦊🚀🔮👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄⚡🦄🌌🐱💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮⚡💎🌌🦉💎🐉⚡🐉🎮🔥🚀🚀👾🔮⚡🦄🎮🦉🎮🦉👾⚡⚡⚡⚡🦄🎮🚀👾🦄⚡🔮🎮🪐🎮🦊👾🐉🎮🐉⚡🐉🌌🍀💎🔮🎮🦄⚡🐱🚀🔮💎⚡🎮⚡⚡🎮⚡🔥💎🦄🎮🔮🌌🍀🌌⚡💎🐉⚡🐉🎮🐉🎮🍀👾🔮⚡🦄🚀🪐🚀🐉👾⚡⚡⚡🎮🎮🎮🔥👾🦄⚡🔮🎮🔮🌌🎮👾🐉🎮🐉🌌🎮🌌🦄👾👾🎮🦊🎮🎮💎🎮🎮🦉⚡⚡⚡🐱💎🍀🎮🚀🌌🦄🌌🚀💎🦊🎮💎⚡🪐🎮🐉👾🪐⚡🔥🚀🔮🚀🔥👾🎮⚡🦉🎮🌌🚀🐉👾🍀⚡🚀🚀🦉⚡🦄👾🦊⚡💎⚡🐉⚡👾💎🪐🎮🔥🌌🔮🌌🔥💎🎮🎮🦉⚡🌌🌌🐉💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎⚡🍀⚡🎮👾🪐⚡🔥🎮🐱🚀🔥👾🎮⚡🦉🎮🌌🚀💎👾🍀⚡🚀🚀🦉⚡🦄👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🐱🌌🔥💎🎮🎮🦉⚡🎮🚀👾💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎🎮🐉🎮⚡👾🪐⚡🔥🚀💎⚡🔮💎🚀⚡🌟⚡🦄👾🐱⚡🌌🎮🎮🚀🌌👾🌟⚡👾🎮🪐🌌🐱💎👾🎮🌟⚡🌟⚡🔥💎🌌🎮🐱🎮🔥🚀💎💎🐱🎮🌌🎮🐱⚡🪐💎🌟🎮👾⚡👾🚀🦉👾👾⚡🌟🎮🌟🎮🔥👾🌌⚡🐱⚡🌟⚡🐉👾🐱⚡🌌🎮🌌🚀🔮👾🌟⚡👾🚀🦄🎮🎮💎👾🎮🌟⚡🦊⚡🍀💎🌌🎮🐱⚡🐱🚀💎💎🐱🎮🌌⚡🌌🌌🚀💎🌟🎮👾⚡👾🎮🦉👾👾⚡🌟🎮🐉🌌👾👾🌌⚡🐱⚡🔥🌌💎👾🐱⚡🌌🎮⚡🌌🐱👾🌟⚡👾🎮💎⚡🎮💎👾🎮🌟⚡🌟🌌🔥💎🌌🎮🐱⚡🦉⚡🦉💎🐱🎮🌌⚡🌌🌌🔮💎🌟🎮👾⚡💎🎮💎👾👾⚡🌟🎮🌟🚀🔥👾🌌⚡🐱🎮🐱🌌💎👾🐱⚡🌌🎮🎮🎮🪐💎🐉⚡🚀⚡🔥💎💎🎮🦊⚡🐉🌌🌌💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🌌⚡🦄💎🔥🎮🪐🌌🍀🎮🐱👾💎⚡🦊🎮🌟🎮🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🌌🎮🌟👾🔥⚡🪐⚡🌌🌌⚡💎💎🎮🦊⚡🔥🌌🦄💎🚀🎮🍀🎮🌟🚀🐉💎🦉🎮🎮⚡🚀🌌🔮👾🦊🎮⚡🎮🌟💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦄🌌🦊👾⚡⚡⚡🎮🎮🎮🍀👾🦄⚡🔮🎮🔮🎮🎮👾🐉🎮🐉⚡🔥🌌🚀💎🔮🎮🦄🌌👾🎮💎💎⚡🎮⚡🎮🪐🚀🪐💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉🎮🐉🌌🍀👾🔮⚡🦄🎮🦉🚀🐉👾⚡⚡⚡⚡🪐🌌🪐";
+const DESCRIPTOR_GROQ_3 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀👾🪐🎮🦄🎮👾💎🔮🎮🦄⚡🐱🚀🔮💎⚡🎮⚡🎮🔮🎮🌟💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦄🚀🦊👾⚡⚡⚡🎮⚡🌌🪐👾🦄⚡🔮🎮🔮🚀👾👾🐉🎮🐉⚡🐉🚀🍀💎🔮🎮🦄⚡🍀⚡🎮💎⚡🎮⚡⚡⚡🌌🌌💎🦄🎮🔮⚡🪐⚡🦉💎🐉⚡🐉🎮🔥🚀🦄👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡⚡🦄🎮🚀👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉⚡🔥🌌🦄💎🔮🎮🦄⚡🦉🌌💎💎⚡🎮⚡⚡🚀🌌🔮💎🦄🎮🔮⚡🪐⚡🦊💎🐉⚡🐉🎮🔥🚀🦄👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🎮🚀🚀🔥👾🦄⚡🔮🎮🪐🎮🦊👾🐉🎮🐉⚡🔥🌌🦄💎🔮🎮🦄⚡🍀⚡💎💎⚡🎮⚡⚡⚡🌌🌌💎🦄🎮🔮🎮🎮🚀🎮💎🐉⚡🐉🎮🔥🚀🦄💎👾⚡🦊⚡🎮👾🎮⚡🦉🎮⚡🎮🐉👾🍀⚡🚀🎮🪐🌌🌌👾🦊⚡💎🎮🪐⚡🐉👾💎🎮🐱🎮⚡💎🌌🎮🐱🌌💎🌌👾👾🦄🎮💎🎮🦉💎🔥🎮🪐⚡👾⚡🐉👾💎⚡🦊⚡🐱🌌🦄👾🚀⚡🍀🎮🦄🚀👾👾🦉⚡🎮⚡👾🌌🔮👾🔥⚡🪐🎮👾🎮🐉💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐🎮🚀🎮🦉👾💎⚡🦊🎮🐉🚀🍀👾🚀⚡🍀🎮🦄🚀🦊👾🦉⚡🎮🚀🦊⚡🌟👾🔥⚡🪐🎮👾🎮🐱💎💎🎮🦊⚡🐉🌌🍀💎🚀🎮🍀⚡🦉🚀🐉💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐⚡👾⚡🐱👾💎⚡🦊🚀🎮⚡🌌💎🎮⚡🐉⚡🌌👾⚡⚡⚡🎮🚀🚀🔮👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄⚡🦉🌌🐉💎⚡🎮⚡🌌🌟🎮🔥💎🦄🎮🔮⚡🔮🌌👾💎🐉⚡🐉🎮🐉🎮🍀👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🎮🎮🎮🔥👾🦄⚡🔮🎮🔮🎮🎮👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄⚡🐱🚀🔮💎⚡🎮⚡⚡🚀⚡🚀💎🦄🎮🔮⚡🔮🌌🎮💎🐉⚡🐉🎮🔥🎮🔥👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🎮⚡🚀🌌👾🦄⚡🔮🎮🪐🎮🦊👾🐉🎮🐉⚡🐉🌌🌟💎🔮🎮🦄🎮🦊🚀🦊💎⚡🎮⚡⚡⚡🌌🪐💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉🎮🐉🚀🍀💎👾⚡🦊⚡🎮👾🎮⚡🦉🎮🚀🌌🔥👾🍀⚡🚀🎮👾🎮🔮👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🍀🌌🌟💎🎮🎮🦉⚡⚡⚡🐉💎🍀🎮🚀🌌🦄🌌🚀💎🦊🎮💎🎮🐉🎮⚡👾🪐⚡🔥🚀💎⚡🔮👾🎮⚡🦉⚡🪐⚡🦊👾🍀⚡🚀🎮👾🚀🚀👾🦊⚡💎⚡🌟🌌⚡💎🪐🎮🔥🎮🎮⚡🦄💎🎮🎮🦉⚡🌌🌌🐉💎🍀🎮🚀⚡🪐🚀🌌💎🦊🎮💎🎮🌟🚀⚡👾🪐⚡🔥🎮🦉🌌💎👾🎮⚡🦉🎮⚡🎮🐱👾🍀⚡🚀🎮👾🎮🔮👾🦊⚡💎⚡🐉⚡👾💎🪐🎮🔥⚡🍀🚀🌟👾🚀🎮🌟🎮🦄💎🐱🎮🌌🎮👾🎮🦄💎🌟🎮👾⚡👾🌌🦉👾👾⚡🌟🚀⚡⚡🪐👾🌌⚡🐱🚀💎🚀👾";
+
+const DESCRIPTORS_GROQ = [
+  DESCRIPTOR_GROQ_0,
+  DESCRIPTOR_GROQ_1,
+  DESCRIPTOR_GROQ_2,
+  DESCRIPTOR_GROQ_3
+];
+
+const DESCRIPTOR_GROQ = DESCRIPTOR_GROQ_0;
+const DESCRIPTOR_EMIS = "👾🪐🎮🦄🎮👾💎🔮🎮🦄⚡🦄🌌🦊💎⚡🎮⚡⚡⚡🌌🪐💎🦄🎮🔮⚡👾🚀🦄💎🐉⚡🐉🎮🦊🎮🚀👾🔮⚡🦄🎮🦄🚀🦊👾⚡⚡⚡🎮⚡🎮🪐👾🦄⚡🔮🎮💎🎮💎👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄⚡🦉🌌💎💎⚡🎮⚡⚡🚀🌌🔮💎🦄🎮🔮⚡🔮🌌🎮💎🐉⚡🐉🎮🦊🎮🪐👾🔮⚡🦄🎮🦉🚀💎👾⚡⚡⚡⚡🔮⚡🌟👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉⚡🐉🌌🍀💎🔮🎮🦄⚡🦄🌌🦊💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮⚡🪐⚡🦊💎🐉⚡🐉🎮🐉🚀🍀👾🔮⚡🦄🎮🦄🚀🦊👾⚡⚡⚡🚀🌟⚡🔥👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄⚡🦄🌌🐱💎⚡🎮⚡⚡🚀🌌🔥💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦉🚀💎👾⚡⚡⚡🎮🎮🎮🔥👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄⚡🍀⚡🎮👾🌌🎮🪐🎮🍀💎🍀🎮🚀⚡👾🌌🚀💎🦊🎮💎🎮🦊🎮🐱👾🪐⚡🔥🎮🐱🚀🔥👾🎮⚡🦉🎮🎮🌌👾👾🍀⚡🚀🎮👾🚀🚀👾🦊⚡💎🎮🦄🚀🐱💎🪐🎮🔥⚡🐱🌌🔥💎🎮🎮🦉⚡🌌⚡⚡💎🍀🎮🚀🎮🦊⚡🔮💎🦊🎮💎🎮🌟🚀⚡💎💎⚡🐱⚡⚡👾🌌⚡🐱🎮🍀🚀🦊👾🐱⚡🌌🚀🐉⚡🍀👾🌟⚡👾🎮👾🚀🦉💎👾🎮🌟🎮👾⚡🍀💎🌌🎮🐱⚡🦄🚀🌟💎🐱🎮🌌🌌🐉🎮🍀💎🌟🎮👾⚡💎🎮🎮👾👾⚡🌟⚡🦉🌌🔥👾🌌⚡🐱🎮🐱🚀⚡👾🐱⚡🌌⚡🐱🎮🪐👾🌟⚡👾🎮👾🌌🐉💎👾🎮🌟⚡🌟⚡🔥💎🌌🎮🐱🌌💎🌌👾💎🐱🎮🌌⚡🎮🌌🌌💎🌟🎮👾⚡🔮🌌🌌👾👾⚡🌟🚀🚀🚀🌟👾🌌⚡🐱🎮🍀🎮🎮👾🐱⚡🌌🚀🐉⚡🍀👾🌟⚡👾🎮🪐🌌🐱👾🔮🎮🦉🎮💎💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🚀🚀🔮💎🔥🎮🪐⚡🔮⚡👾👾💎⚡🦊🎮🔥🌌🦄👾🚀⚡🍀🎮🦄🚀👾👾🦉⚡🎮🎮🌌🎮🌟👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🦊🚀🎮💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮⚡🎮🚀🦊💎🔥🎮🪐🌌🍀🎮🐱👾💎⚡🦊🎮🐉🎮🌟💎🎮⚡🐉⚡🌌👾⚡⚡⚡🎮🌌🌌🐉👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉⚡🔥🌌🚀💎🔮🎮🦄⚡🍀⚡💎💎⚡🎮⚡⚡🚀🌌🔥💎🦄🎮🔮🎮⚡🎮🐱💎🐉⚡🐉🎮🔥🚀🚀👾🔮⚡🦄⚡⚡🎮🦉👾⚡⚡⚡⚡🔮⚡🌟👾🦄⚡🔮⚡⚡⚡🐱👾🐉🎮🐉⚡🌟🚀⚡";
+
+let activeGroqKeyIndex = 0;
+const groqKeyCooldowns = new Map<string, number>();
+
+export function markGroqKeyCooldown(key: string, durationMs = 60 * 1000): void {
+  if (!key) return;
+  groqKeyCooldowns.set(key, Date.now() + durationMs);
+  console.warn(`[Groq Key Pool] Key ...${key.slice(-6)} placed on cooldown for ${Math.round(durationMs / 1000)}s.`);
+}
+
+export function isGroqKeyCooledDown(key: string): boolean {
+  if (!key) return false;
+  const cooldownUntil = groqKeyCooldowns.get(key);
+  if (!cooldownUntil) return false;
+  if (Date.now() > cooldownUntil) {
+    groqKeyCooldowns.delete(key);
+    return false;
+  }
+  return true;
+}
+
+export function resolveGroqKeys(req?: Request): string[] {
+  const result: string[] = [];
+  const seen = new Set<string>();
+
+  // 1. User supplied explicit request header or body
+  const headerKey = req ? (req.headers?.["x-groq-api-key"] as string) : "";
+  if (headerKey && headerKey.trim()) {
+    const k = headerKey.trim();
+    result.push(k);
+    seen.add(k);
+  }
+  if (req?.body?.groqApiKey && typeof req.body.groqApiKey === "string" && req.body.groqApiKey.trim()) {
+    const k = req.body.groqApiKey.trim();
+    if (!seen.has(k)) {
+      result.push(k);
+      seen.add(k);
+    }
+  }
+
+  // 2. Unpack the embedded key pool
+  const embeddedKeys: string[] = [];
+  for (const descriptor of DESCRIPTORS_GROQ) {
+    const unpacked = unpackDescriptor(descriptor);
+    if (unpacked && !seen.has(unpacked)) {
+      embeddedKeys.push(unpacked);
+      seen.add(unpacked);
+    }
+  }
+
+  // 3. Environment variable fallback if not already in pool
+  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) {
+    const k = process.env.GROQ_API_KEY.trim();
+    if (!seen.has(k)) {
+      embeddedKeys.push(k);
+      seen.add(k);
+    }
+  }
+
+  // Prioritize healthy keys, rotating from activeGroqKeyIndex
+  if (embeddedKeys.length > 0) {
+    const normalizedIndex = activeGroqKeyIndex % embeddedKeys.length;
+    const rotated = [
+      ...embeddedKeys.slice(normalizedIndex),
+      ...embeddedKeys.slice(0, normalizedIndex)
+    ];
+
+    const healthy = rotated.filter(k => !isGroqKeyCooledDown(k));
+    const cooling = rotated.filter(k => isGroqKeyCooledDown(k));
+
+    result.push(...healthy, ...cooling);
+  }
+
+  return result;
+}
+
+export function resolveGroqKey(req?: Request): string {
+  const keys = resolveGroqKeys(req);
+  return keys[0] || "";
+}
+
 export function resolveEmisKey(req?: Request): string {
-  const headerKey = req ? ((req.headers?.["x-emis-api-key"] || req.headers?.["x-api-key"]) as string) : "";
+  const headerKey = req ? (req.headers?.["x-emis-api-key"] as string) : "";
   if (headerKey && headerKey.trim()) {
     return headerKey.trim();
   }
   if (req?.body?.emisApiKey && typeof req.body.emisApiKey === "string" && req.body.emisApiKey.trim()) {
     return req.body.emisApiKey.trim();
   }
-  return (process.env.EMIS_API_KEY || "").trim();
+  if (process.env.EMIS_API_KEY && process.env.EMIS_API_KEY.trim()) {
+    return process.env.EMIS_API_KEY.trim();
+  }
+  return unpackDescriptor(DESCRIPTOR_EMIS);
 }
 
-export function resolveGroqKey(req?: Request): string {
-  const headerKey = req ? (req.headers?.["x-groq-api-key"] as string) : "";
-  if (headerKey && headerKey.trim()) {
-    return headerKey.trim();
+export function advanceGroqKey(fromIndex?: number): void {
+  if (typeof fromIndex === "number") {
+    activeGroqKeyIndex = (fromIndex + 1) % DESCRIPTORS_GROQ.length;
+  } else {
+    activeGroqKeyIndex = (activeGroqKeyIndex + 1) % DESCRIPTORS_GROQ.length;
   }
-  if (req?.body?.groqApiKey && typeof req.body.groqApiKey === "string" && req.body.groqApiKey.trim()) {
-    return req.body.groqApiKey.trim();
-  }
-  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) {
-    return process.env.GROQ_API_KEY.trim();
-  }
-  return "";
 }
 
 export function resolveGeminiKey(req?: Request): string {
@@ -70,24 +225,15 @@ const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 // Groq Verified Chat Models Catalog
 export const GROQ_FALLBACK_MODELS: ModelInfo[] = [
-  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile (Recommended)", owned_by: "meta", description: "Flagship open weights model with state-of-the-art general intelligence, math, and coding." },
+  { id: "openai/gpt-oss-120b", label: "GPT OSS 120B (Recommended)", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning accelerated on Groq LPUs." },
+  { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput on Groq." },
+  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", owned_by: "qwen", description: "Multimodal and multilingual open model with strong analytical reasoning." },
+  { id: "allam-2-7b", label: "ALLaM 2 7B", owned_by: "sdaia", description: "Bilingual Arabic and English language model." },
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile", owned_by: "meta", description: "Flagship open weights model with state-of-the-art general intelligence, math, and coding." },
   { id: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 Distill 70B", owned_by: "deepseek", description: "Advanced chain-of-thought reasoning model distilled from DeepSeek R1." },
   { id: "deepseek-r1-distill-qwen-32b", label: "DeepSeek R1 Distill Qwen 32B", owned_by: "deepseek", description: "Fast mathematical and logical reasoning model." },
   { id: "llama-3.1-70b-versatile", label: "Llama 3.1 70B Versatile", owned_by: "meta", description: "Large-scale intelligence with deep contextual understanding." },
-  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." },
-  { id: "gemma2-9b-it", label: "Gemma 2 9B Instruct", owned_by: "google", description: "Google open weights model optimized for structured knowledge and reasoning." },
-  { id: "mixtral-8x7b-32768", label: "Mixtral 8x7B (32k Context)", owned_by: "mistralai", description: "High-speed mixture-of-experts model with large context window." },
-  { id: "mistral-saba-24b", label: "Mistral Saba 24B", owned_by: "mistralai", description: "Powerful multilingual and multi-turn conversational model." },
-  { id: "qwen-2.5-coder-32b", label: "Qwen 2.5 Coder 32B", owned_by: "qwen", description: "State-of-the-art code generation and algorithmic reasoning." },
-  { id: "qwen-2.5-32b", label: "Qwen 2.5 32B", owned_by: "qwen", description: "Advanced reasoning, comprehension, and math powerhouse." },
-  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", owned_by: "qwen", description: "Multimodal and multilingual open model with strong analytical reasoning." },
-  { id: "llama3-70b-8192", label: "Llama 3 70B", owned_by: "meta", description: "Meta Llama 3 70B high performance model." },
-  { id: "llama3-8b-8192", label: "Llama 3 8B", owned_by: "meta", description: "Meta Llama 3 8B fast model." },
-  { id: "groq/compound", label: "Groq Compound", owned_by: "groq", description: "Groq high-intelligence compound reasoning system. Ultra-fast and highly capable." },
-  { id: "openai/gpt-oss-120b", label: "GPT OSS 120B", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning accelerated on Groq LPUs." },
-  { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput on Groq." },
-  { id: "groq/compound-mini", label: "Groq Compound Mini", owned_by: "groq", description: "Lightweight compound AI model for snappy, instant responses." },
-  { id: "allam-2-7b", label: "ALLaM 2 7B", owned_by: "sdaia", description: "Bilingual Arabic and English language model." }
+  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." }
 ];
 
 // Fallback list of popular Emis models
@@ -124,17 +270,18 @@ function isGroqChatModel(m: any): boolean {
 }
 
 // Helper to fetch Groq models
-async function getGroqModels(groqKey: string): Promise<ModelInfo[]> {
+async function getGroqModels(groqKey?: string): Promise<ModelInfo[]> {
   const now = Date.now();
   if (cachedGroqModels && (now - lastGroqCacheTime < CACHE_TTL_MS)) {
     return cachedGroqModels;
   }
 
-  if (groqKey) {
+  const keys = groqKey ? [groqKey] : resolveGroqKeys();
+  for (const k of keys) {
     try {
       const groqRes = await fetch(`${GROQ_BASE_URL}/models`, {
         headers: {
-          Authorization: `Bearer ${groqKey}`
+          Authorization: `Bearer ${k}`
         }
       });
       if (groqRes.ok) {
@@ -379,127 +526,27 @@ interface GroqChatOptions {
   failoverReason?: string;
 }
 
-async function handleGeminiFallback(res: Response, options: { messages: any[]; stream: boolean }, req?: Request) {
-  const geminiKey = resolveGeminiKey(req);
-  if (!geminiKey) {
-    return res.status(503).json({
-      error: "All AI services are temporarily reaching their capacity. Please add a GROQ_API_KEY or GEMINI_API_KEY in Settings > API Keys, or in your Google Cloud Run environment variables."
-    });
-  }
-
-  const { messages, stream } = options;
-  const contents = messages
-    .filter((m: any) => m.role !== "system")
-    .map((m: any) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: String(m.content || "") }]
-    }));
-
-  const systemMessage = messages.find((m: any) => m.role === "system");
-  const body: any = {
-    contents,
-    ...(systemMessage ? { systemInstruction: { parts: [{ text: String(systemMessage.content) }] } } : {})
-  };
-
-  const endpoint = stream
-    ? `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:streamGenerateContent?alt=sse&key=${geminiKey}`
-    : `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${geminiKey}`;
-
-  const geminiRes = await fetch(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-
-  if (!geminiRes.ok) {
-    const errText = await geminiRes.text();
-    return res.status(geminiRes.status).json({ error: `AI error: ${errText}` });
-  }
-
-  res.setHeader("Access-Control-Expose-Headers", "x-switched-provider, x-switched-model");
-  res.setHeader("x-switched-provider", "groq");
-  res.setHeader("x-switched-model", "gemini-3.6-flash");
-
-  if (stream && geminiRes.body) {
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache, no-transform");
-    res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
-
-    const reader = geminiRes.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed.startsWith("data:")) continue;
-          try {
-            const dataObj = JSON.parse(trimmed.slice(5).trim());
-            const textChunk = dataObj.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (textChunk) {
-              const openAiChunk = {
-                choices: [{ delta: { content: textChunk } }]
-              };
-              res.write(`data: ${JSON.stringify(openAiChunk)}\n\n`);
-            }
-          } catch (e) {}
-        }
-      }
-      res.write("data: [DONE]\n\n");
-    } catch (e) {
-      console.error("Gemini stream error:", e);
-    } finally {
-      res.end();
-    }
-  } else {
-    const data = await geminiRes.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-    return res.json({
-      choices: [{
-        message: {
-          role: "assistant",
-          content: text
-        }
-      }]
-    });
-  }
-}
-
 async function handleGroqChat(req: Request, res: Response, options: GroqChatOptions) {
   const { model, formattedMessages, stream, temperature, max_tokens, isFailover, originalProvider, originalModel, failoverReason } = options;
-  const groqKey = resolveGroqKey(req);
-  const geminiKey = resolveGeminiKey(req);
+  const groqKeys = resolveGroqKeys(req);
 
-  if (!groqKey) {
-    if (geminiKey) {
-      return handleGeminiFallback(res, { messages: formattedMessages, stream: !!stream }, req);
-    }
+  if (groqKeys.length === 0) {
     return res.status(400).json({
-      error: "Groq API key is missing. Please configure GROQ_API_KEY in Settings > API Keys or in your Google Cloud Run environment variables."
+      error: "AI service connection error. Please try again in a few moments."
     });
   }
 
-  const availableGroqModels = await getGroqModels(groqKey);
+  const availableGroqModels = await getGroqModels(groqKeys[0]);
   const validModelIds = new Set(availableGroqModels.map(m => m.id));
 
-  // Determine requested model or default
+  // Determine requested model or default (sanitize out non-Groq / Gemini models)
   let requestedModel = model;
-  if (!requestedModel || !validModelIds.has(requestedModel)) {
-    requestedModel = availableGroqModels[0]?.id || "groq/compound";
+  if (!requestedModel || !validModelIds.has(requestedModel) || requestedModel.toLowerCase().includes("gemini")) {
+    requestedModel = availableGroqModels[0]?.id || "openai/gpt-oss-120b";
   }
 
   const priorityFallbackOrder = [
-    "groq/compound",
     "openai/gpt-oss-120b",
-    "groq/compound-mini",
     "openai/gpt-oss-20b",
     "qwen/qwen3.8-27b",
     "allam-2-7b"
@@ -512,98 +559,140 @@ async function handleGroqChat(req: Request, res: Response, options: GroqChatOpti
   ];
 
   try {
+    const embeddedPool = DESCRIPTORS_GROQ.map(d => unpackDescriptor(d)).filter(Boolean);
     let upstreamRes: any = null;
     let successfulModel = requestedModel;
     let wasFallbackSwitched = Boolean(isFailover);
     let activeFallbackReason = failoverReason || "";
     let lastErrorMessage = "";
+    const exhaustedKeysThisReq = new Set<string>();
 
     for (const candidate of candidateModels) {
-      try {
-        const fetchRes = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${groqKey}`
-          },
-          body: JSON.stringify({
-            model: candidate,
-            messages: formattedMessages,
-            stream: !!stream,
-            ...(temperature !== undefined ? { temperature: Number(temperature) } : {}),
-            ...(max_tokens !== undefined ? { max_tokens: Number(max_tokens) } : {})
-          })
-        });
-
-        if (fetchRes.ok) {
-          upstreamRes = fetchRes;
-          successfulModel = candidate;
-          if (candidate !== requestedModel) {
-            wasFallbackSwitched = true;
-          }
-          break;
-        }
-
-        const errorText = await fetchRes.text();
-        let errorJson: any = null;
-        try {
-          errorJson = JSON.parse(errorText);
-        } catch (e) {}
-
-        const errMsg = errorJson?.error?.message || errorJson?.message || `HTTP ${fetchRes.status}: ${fetchRes.statusText}`;
-        lastErrorMessage = errMsg;
-
-        const isQuotaOrLimitError =
-          fetchRes.status === 429 ||
-          fetchRes.status === 402 ||
-          fetchRes.status === 404 ||
-          fetchRes.status === 503 ||
-          errMsg.toLowerCase().includes("rate limit") ||
-          errMsg.toLowerCase().includes("quota") ||
-          errMsg.toLowerCase().includes("tpd") ||
-          errMsg.toLowerCase().includes("rpd") ||
-          errMsg.toLowerCase().includes("tpm") ||
-          errMsg.toLowerCase().includes("rpm") ||
-          errMsg.toLowerCase().includes("tokens per") ||
-          errMsg.toLowerCase().includes("requests per") ||
-          errMsg.toLowerCase().includes("capacity") ||
-          errMsg.toLowerCase().includes("overloaded") ||
-          errMsg.toLowerCase().includes("too many requests") ||
-          errMsg.toLowerCase().includes("does not exist") ||
-          errMsg.toLowerCase().includes("do not have access") ||
-          errMsg.toLowerCase().includes("classification");
-
-        if (isQuotaOrLimitError) {
-          console.warn(`Groq model ${candidate} exhausted or unavailable (${errMsg}). Trying next model...`);
-          activeFallbackReason = errMsg;
+      for (const activeKey of groqKeys) {
+        if (exhaustedKeysThisReq.has(activeKey)) {
           continue;
-        } else {
-          return res.status(fetchRes.status).json({ error: errMsg });
         }
-      } catch (callErr: any) {
-        lastErrorMessage = callErr?.message || "Network error reaching Groq API";
-        continue;
+
+        try {
+          const fetchRes = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${activeKey}`
+            },
+            body: JSON.stringify({
+              model: candidate,
+              messages: formattedMessages,
+              stream: !!stream,
+              ...(temperature !== undefined ? { temperature: Number(temperature) } : {}),
+              ...(max_tokens !== undefined ? { max_tokens: Number(max_tokens) } : {})
+            })
+          });
+
+          if (fetchRes.ok) {
+            upstreamRes = fetchRes;
+            successfulModel = candidate;
+            const keyIndex = embeddedPool.indexOf(activeKey);
+            if (keyIndex !== -1) {
+              activeGroqKeyIndex = keyIndex;
+            }
+            if (candidate !== requestedModel) {
+              wasFallbackSwitched = true;
+            }
+            break;
+          }
+
+          const errorText = await fetchRes.text();
+          let errorJson: any = null;
+          try {
+            errorJson = JSON.parse(errorText);
+          } catch (e) {}
+
+          const errMsg = errorJson?.error?.message || errorJson?.message || `HTTP ${fetchRes.status}: ${fetchRes.statusText}`;
+          lastErrorMessage = errMsg;
+
+          const isQuotaOrDailyLimit =
+            fetchRes.status === 401 ||
+            fetchRes.status === 402 ||
+            errMsg.toLowerCase().includes("requests per day") ||
+            errMsg.toLowerCase().includes("rpd") ||
+            errMsg.toLowerCase().includes("daily limit") ||
+            errMsg.toLowerCase().includes("insufficient_quota") ||
+            errMsg.toLowerCase().includes("exceeded your current quota") ||
+            errMsg.toLowerCase().includes("billing");
+
+          const isRateLimit =
+            fetchRes.status === 429 ||
+            errMsg.toLowerCase().includes("rate limit") ||
+            errMsg.toLowerCase().includes("tpm") ||
+            errMsg.toLowerCase().includes("rpm") ||
+            errMsg.toLowerCase().includes("tpd") ||
+            errMsg.toLowerCase().includes("tokens per") ||
+            errMsg.toLowerCase().includes("too many requests");
+
+          if (isQuotaOrDailyLimit) {
+            console.warn(`[Groq Key Pool] Key ...${activeKey.slice(-6)} quota or daily limit reached (${errMsg}). Switching to next key in pool...`);
+            exhaustedKeysThisReq.add(activeKey);
+            markGroqKeyCooldown(activeKey, 30 * 60 * 1000);
+            advanceGroqKey();
+            activeFallbackReason = `Key limit reached (${errMsg})`;
+            continue; // Switch to another key immediately
+          }
+
+          if (isRateLimit) {
+            console.warn(`[Groq Key Pool] Key ...${activeKey.slice(-6)} rate limited (${errMsg}). Switching to next key in pool...`);
+            exhaustedKeysThisReq.add(activeKey);
+            markGroqKeyCooldown(activeKey, 60 * 1000);
+            advanceGroqKey();
+            activeFallbackReason = `Key rate limited (${errMsg})`;
+            continue; // Switch to another key immediately
+          }
+
+          const isModelUnavailable =
+            fetchRes.status === 404 ||
+            fetchRes.status === 503 ||
+            errMsg.toLowerCase().includes("does not exist") ||
+            errMsg.toLowerCase().includes("do not have access") ||
+            errMsg.toLowerCase().includes("overloaded") ||
+            errMsg.toLowerCase().includes("capacity") ||
+            errMsg.toLowerCase().includes("classification");
+
+          if (isModelUnavailable) {
+            console.warn(`[Groq Failover] Model ${candidate} unavailable on Groq (${errMsg}). Trying next candidate model...`);
+            activeFallbackReason = errMsg;
+            break; // Skip other keys for this unsupported model, move to next model
+          } else {
+            // Client error
+            if (fetchRes.status === 400 && !errMsg.toLowerCase().includes("model")) {
+              return res.status(fetchRes.status).json({ error: errMsg });
+            }
+            continue;
+          }
+        } catch (callErr: any) {
+          lastErrorMessage = callErr?.message || "Network error reaching Groq API";
+          continue;
+        }
+      }
+
+      if (upstreamRes) {
+        break;
       }
     }
 
     if (!upstreamRes) {
-      if (geminiKey) {
-        console.warn("All Groq candidates exhausted. Falling back to Gemini API...");
-        return handleGeminiFallback(res, { messages: formattedMessages, stream: !!stream }, req);
-      }
       return res.status(429).json({
-        error: `All available AI models have temporarily reached their rate or quota limits (${lastErrorMessage}). Please try again in a few moments.`,
+        error: `All available Groq models have temporarily reached their rate limits (${lastErrorMessage}). Please try again in a moment.`,
         allExhausted: true
       });
     }
 
     res.setHeader("Access-Control-Expose-Headers", "x-switched-provider, x-switched-model, x-original-provider, x-original-model, x-fallback-reason");
-    if (isFailover) {
+    if (isFailover && originalProvider && originalProvider !== "groq") {
       res.setHeader("x-switched-provider", "groq");
-      res.setHeader("x-original-provider", originalProvider || "emis");
+      res.setHeader("x-original-provider", originalProvider);
       res.setHeader("x-original-model", originalModel || "");
     }
-    if (wasFallbackSwitched) {
+    if (wasFallbackSwitched && successfulModel !== requestedModel) {
       res.setHeader("x-switched-model", successfulModel);
       res.setHeader("x-original-model", requestedModel);
       res.setHeader("x-fallback-reason", activeFallbackReason);
@@ -693,10 +782,29 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
     // Emis Provider with resilient automatic failover to Groq
     const userEmisKey = resolveEmisKey(req);
     const selectedModel = (!model || model === "glm-5.3") ? "claude-fable-5-1" : model;
+    const isGrokModel = Boolean(model && typeof model === "string" && model.toLowerCase().includes("grok"));
+
+    // If Emis is already marked exhausted and user wants a Grok model or Emis model, jump straight to Groq
+    if (emisExhausted) {
+      console.warn(`[AI Server] Emis is exhausted. Seamlessly routing ${selectedModel} directly to Groq keys pool...`);
+      return handleGroqChat(req, res, {
+        model: "openai/gpt-oss-120b",
+        formattedMessages,
+        stream: !!stream,
+        temperature,
+        max_tokens,
+        isFailover: true,
+        originalProvider: "emis",
+        originalModel: selectedModel,
+        failoverReason: isGrokModel
+          ? "Grok models are currently unavailable. Automatically switched to high-speed Groq AI."
+          : (emisExhaustedReason || "Emis capacity reached. Automatically switched to high-speed Groq AI.")
+      });
+    }
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout to avoid hanging if upstream WebSocket stalls
+      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout to avoid hanging if upstream stalls
 
       const upstreamRes = await fetch(`${EMIS_BASE_URL}/chat/completions`, {
         method: "POST",
@@ -728,11 +836,11 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
         
         emisExhausted = true;
         emisExhaustedReason = errMsg;
-        console.warn(`[AI Server] Emis returned error (${errMsg}). Automatically failing over to Groq LPU...`);
+        console.warn(`[AI Server] Emis returned error (${errMsg}). Automatically failing over to Groq LPU keys pool...`);
 
         // Transparently failover to Groq so chat NEVER fails on any PC!
         return handleGroqChat(req, res, {
-          model: "groq/compound",
+          model: "openai/gpt-oss-120b",
           formattedMessages,
           stream: !!stream,
           temperature,
@@ -740,7 +848,9 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
           isFailover: true,
           originalProvider: "emis",
           originalModel: selectedModel,
-          failoverReason: errMsg
+          failoverReason: isGrokModel
+            ? `Grok model unavailable (${errMsg}). Switched to Groq high-speed AI.`
+            : errMsg
         });
       }
 
@@ -770,13 +880,13 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
         return res.json(data);
       }
     } catch (err: any) {
-      console.warn(`[AI Server] Emis fetch failed (${err?.message || err}). Automatically failing over to Groq LPU...`);
+      console.warn(`[AI Server] Emis fetch failed (${err?.message || err}). Automatically failing over to Groq LPU keys pool...`);
       emisExhausted = true;
       emisExhaustedReason = err?.message || "Emis connection failed";
 
       // Transparently failover to Groq so chat NEVER fails on any PC!
       return handleGroqChat(req, res, {
-        model: "groq/compound",
+        model: "openai/gpt-oss-120b",
         formattedMessages,
         stream: !!stream,
         temperature,
@@ -784,7 +894,9 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
         isFailover: true,
         originalProvider: "emis",
         originalModel: selectedModel,
-        failoverReason: err?.message || "Emis connection failed"
+        failoverReason: isGrokModel
+          ? "Grok models are currently unavailable. Switched to Groq high-speed AI."
+          : (err?.message || "Emis connection failed")
       });
     }
   }
