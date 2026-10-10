@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
 import Hls from 'hls.js';
 import { storage } from '../utils/storage';
+import { resolveClientTrackAudio } from './clientMusicFallback';
 
 export interface MusicTrack {
   id: string | number;
@@ -161,6 +162,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const onLoadedMetadata = () => {
       if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
+        setCurrentTrack(prev => prev ? {
+          ...prev,
+          duration: Math.round(audio.duration),
+          formattedDuration: formatSeconds(Math.round(audio.duration))
+        } : null);
       }
       setIsLoadingAudio(false);
     };
@@ -168,6 +174,11 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const onDurationChange = () => {
       if (audio.duration && isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
+        setCurrentTrack(prev => prev ? {
+          ...prev,
+          duration: Math.round(audio.duration),
+          formattedDuration: formatSeconds(Math.round(audio.duration))
+        } : null);
       }
     };
 
@@ -344,6 +355,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           }
         }, 9000);
 
+        hls.on(Hls.Events.LEVEL_LOADED, (_event, data) => {
+          if (data.details?.totalduration && isFinite(data.details.totalduration) && data.details.totalduration > 0) {
+            setDuration(data.details.totalduration);
+            setCurrentTrack(prev => prev ? {
+              ...prev,
+              duration: Math.round(data.details.totalduration),
+              formattedDuration: formatSeconds(Math.round(data.details.totalduration))
+            } : null);
+          }
+        });
+
         hls.on(Hls.Events.MANIFEST_PARSED, () => {
           if (expectedRequestId !== undefined && playRequestIdRef.current !== expectedRequestId) {
             clearTimeout(safetyTimer);
@@ -506,30 +528,52 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       let audioUrl = track.url;
       let picUrl = track.pic;
       let resolvedDuration = track.duration;
+      let backendStreamUrl = '';
 
       const targetId = track.rawId || track.id;
       const trackSource = track.source || (String(track.id).startsWith('octave_') ? 'Octave' : 'soundcloud');
 
       // Resolve full stream if URL is empty or unresolved
       if (!audioUrl || audioUrl.startsWith('/api/music/url')) {
-        const queryParams = new URLSearchParams({
-          id: String(track.id || targetId),
-          name: track.name || '',
-          artist: track.artist || '',
-          previewUrl: track.previewUrl || '',
-          source: trackSource,
-          duration: String(track.duration || 0),
-          isSpedUp: track.isSpedUp ? '1' : '0',
-          isSlowed: track.isSlowed ? '1' : '0'
-        });
-        const res = await fetch(`/api/music/url?${queryParams.toString()}`, { signal });
-        if (playRequestIdRef.current !== currentRequestId) return; // Superceded by another click
+        try {
+          const queryParams = new URLSearchParams({
+            id: String(track.id || targetId),
+            name: track.name || '',
+            artist: track.artist || '',
+            previewUrl: track.previewUrl || '',
+            source: trackSource,
+            duration: String(track.duration || 0),
+            isSpedUp: track.isSpedUp ? '1' : '0',
+            isSlowed: track.isSlowed ? '1' : '0'
+          });
+          const res = await fetch(`/api/music/url?${queryParams.toString()}`, { signal }).catch(() => null);
+          if (playRequestIdRef.current !== currentRequestId) return;
 
-        const data = await res.json();
-        audioUrl = data.url;
-        if ((!track.duration || track.duration === 0) && data.duration && data.duration > 0) {
-          resolvedDuration = data.duration;
-          setDuration(data.duration);
+          if (res && res.ok) {
+            const data = await res.json().catch(() => ({}));
+            audioUrl = data.url;
+            backendStreamUrl = data.streamUrl || '';
+            if ((!track.duration || track.duration === 0) && data.duration && data.duration > 0) {
+              resolvedDuration = data.duration;
+              setDuration(data.duration);
+            }
+          }
+        } catch (err) {
+          console.warn('[MusicContext] Backend URL resolve failed, using client fallback:', err);
+        }
+
+        // Direct client stream resolution fallback for all sources
+        if (!audioUrl) {
+          const clientStream = await resolveClientTrackAudio(track);
+          if (clientStream.url) {
+            audioUrl = clientStream.url;
+            if (clientStream.duration && (!resolvedDuration || resolvedDuration === 0)) {
+              resolvedDuration = clientStream.duration;
+              setDuration(clientStream.duration);
+            }
+          } else if (track.previewUrl && trackSource === 'deezer') {
+            audioUrl = track.previewUrl;
+          }
         }
       }
 
@@ -538,9 +582,9 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       // Resolve picture if missing
       if (!picUrl || picUrl.startsWith('/api/music/pic')) {
         try {
-          const picRes = await fetch(`/api/music/pic?id=${encodeURIComponent(String(targetId))}`, { signal });
-          if (playRequestIdRef.current === currentRequestId) {
-            const picData = await picRes.json();
+          const picRes = await fetch(`/api/music/pic?id=${encodeURIComponent(String(targetId))}`, { signal }).catch(() => null);
+          if (playRequestIdRef.current === currentRequestId && picRes && picRes.ok) {
+            const picData = await picRes.json().catch(() => ({}));
             if (picData?.url) {
               picUrl = picData.url;
             }
@@ -553,9 +597,16 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       let playbackSuccess = false;
       if (audioUrl) {
         playbackSuccess = await applyAudioSourceAndPlay(audioUrl, currentRequestId);
+        // If direct stream fails (e.g. browser CORS restrictions), try the proxy stream route
+        if (!playbackSuccess && backendStreamUrl && backendStreamUrl !== audioUrl) {
+          playbackSuccess = await applyAudioSourceAndPlay(backendStreamUrl, currentRequestId);
+          if (playbackSuccess) {
+            audioUrl = backendStreamUrl;
+          }
+        }
       }
 
-      // If main audio resolution failed or was empty, fall back directly to previewUrl
+      // If main audio resolution failed or was empty, fall back directly to previewUrl if present
       if (!playbackSuccess && track.previewUrl && audioUrl !== track.previewUrl) {
         if (playRequestIdRef.current === currentRequestId) {
           audioUrl = track.previewUrl;

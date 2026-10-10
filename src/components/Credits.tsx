@@ -67,7 +67,7 @@ export default function Credits() {
                 <p className="text-zinc-300">
                   <span className="text-zinc-500">AI Chatbot:</span>{' '}
                   <span className="text-emerald-400 font-medium">
-                    Powered by <a href="https://emis.zxs-is-very.cool/" target="_blank" rel="noopener noreferrer" className="hover:underline">emis.zxs-is-very.cool</a>
+                    Powered by <a href="https://groq.com/" target="_blank" rel="noopener noreferrer" className="hover:underline">Groq</a>
                   </span>
                 </p>
                 <p className="text-zinc-300">

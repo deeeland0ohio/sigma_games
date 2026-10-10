@@ -90,11 +90,18 @@ async function startServer() {
   });
 
   // Serve public and dist static directories BEFORE /games 404 fallback
+  if (fs.existsSync(distDir)) {
+    const distAssetsDir = path.join(distDir, "assets");
+    if (fs.existsSync(distAssetsDir)) {
+      app.use("/assets", express.static(distAssetsDir, {
+        maxAge: "1y",
+        immutable: true
+      }));
+    }
+    app.use(express.static(distDir));
+  }
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
-  }
-  if (fs.existsSync(distDir)) {
-    app.use(express.static(distDir));
   }
   
   // Prevent missing local game assets from hitting Vite middleware / SPA fallback
