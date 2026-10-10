@@ -5,84 +5,6 @@ const aiRouter = Router();
 const EMIS_BASE_URL = "https://emis.zxs-is-very.cool/v1";
 const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
-const PALETTE_SALT = [0x73, 0x69, 0x67, 0x6d, 0x61, 0x5f, 0x67, 0x61, 0x6d, 0x65, 0x73];
-const GLYPH_MAP_A = ["🌵","🍎","🏀","🚗","🛸","🎸","🍩","🤖","🎨","🎯","🏆","🍦","🧩","⚓","🎈","💎"];
-const GLYPH_MAP_B = ["🌌", "🚀", "⚡", "🎮", "👾", "💎", "🔮", "🪐", "🌟", "🔥", "🐉", "🦊", "🐱", "🦉", "🦄", "🍀"];
-
-const LOOKUP_A = new Map(GLYPH_MAP_A.map((em, idx) => [em, idx]));
-const LOOKUP_B = new Map(GLYPH_MAP_B.map((em, idx) => [em, idx]));
-
-function unpackDescriptor(stream: string): string {
-  if (!stream) return "";
-  try {
-    let parts: string[];
-    if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
-      const segmenter = new (Intl as any).Segmenter("en", { granularity: "grapheme" });
-      parts = Array.from(segmenter.segment(stream), (s: any) => s.segment);
-    } else {
-      parts = Array.from(stream);
-    }
-    
-    const intermediate: number[] = [];
-    let idx = 0;
-    for (let i = 0; i < parts.length; i += 2) {
-      const hi = LOOKUP_B.get(parts[i]);
-      const lo = LOOKUP_B.get(parts[i + 1]);
-      if (hi !== undefined && lo !== undefined) {
-        const scrambled = (hi << 4) | lo;
-        const original = (scrambled ^ 0xa5 ^ (idx & 0x1f)) & 0xff;
-        intermediate.push(original);
-        idx++;
-      }
-    }
-
-    const intermediateText = new TextDecoder().decode(new Uint8Array(intermediate));
-
-    let parts2: string[];
-    if (typeof Intl !== "undefined" && (Intl as any).Segmenter) {
-      const segmenter = new (Intl as any).Segmenter("en", { granularity: "grapheme" });
-      parts2 = Array.from(segmenter.segment(intermediateText), (s: any) => s.segment);
-    } else {
-      parts2 = Array.from(intermediateText);
-    }
-
-    const stage1: number[] = [];
-    for (let i = 0; i < parts2.length; i += 2) {
-      const hi = LOOKUP_A.get(parts2[i]);
-      const lo = LOOKUP_A.get(parts2[i + 1]);
-      if (hi !== undefined && lo !== undefined) {
-        const b = ((hi << 4) | lo) & 0xff;
-        const unrotated = ((b >> 3) | (b << 5)) & 0xff;
-        stage1.push(unrotated);
-      }
-    }
-
-    const finalBytes = new Uint8Array(stage1.length);
-    for (let i = 0; i < stage1.length; i++) {
-      finalBytes[i] = stage1[i] ^ PALETTE_SALT[i % PALETTE_SALT.length] ^ ((i * 7 + 13) & 0xff);
-    }
-
-    return new TextDecoder().decode(finalBytes);
-  } catch {
-    return "";
-  }
-}
-
-const DESCRIPTOR_GROQ_0 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🔥🚀🦄💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🔮⚡👾👾💎⚡🦊⚡🦉⚡🚀👾🚀⚡🍀🎮🦄🎮🐱👾🦉⚡🎮🎮🚀🎮🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🔥🚀🦄💎🚀🎮🍀⚡🐱⚡👾💎🦉🎮🎮⚡⚡🌌🪐💎🔥🎮🪐⚡🔮🌌🐱👾💎⚡🦊🎮🐉🎮🌟👾🚀⚡🍀⚡🔥⚡💎👾🦉⚡🎮⚡💎⚡🔥👾🔥⚡🪐🎮👾🎮🐱💎💎🎮🦊🎮💎⚡🌟💎🚀🎮🍀⚡🦉🌌🦉💎🦉🎮🎮🎮💎🎮🔥💎🔥🎮🪐⚡👾⚡🐉👾💎⚡🦊🚀🎮⚡🌌👾🚀⚡🍀🎮🐱🎮👾👾🦉⚡🎮🎮⚡🚀🌟👾🔥⚡🪐🎮👾🎮🐉💎💎🎮🦊⚡🐉🌌🌌💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🚀🌌🚀👾🦊🎮⚡🎮🌟💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🚀🪐🚀🐉👾⚡⚡⚡⚡🪐🌌🪐👾🦄⚡🔮🎮🔮🎮🎮👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄🎮🦊🚀🦊💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮🎮🐉⚡💎💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄⚡⚡🎮🦉👾⚡⚡⚡🎮🎮🎮🍀👾🦄⚡🔮🚀🍀🚀⚡👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄🌌🪐🌌🐉💎⚡🎮⚡⚡🚀🌌🔥💎🦄🎮🔮🎮🎮🚀🎮💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦉🚀🐉👾⚡⚡⚡🎮🚀🚀🔮👾🦄⚡🔮🚀🐱⚡🦉👾🐉🎮🐉⚡🦊⚡🚀💎🔮🎮🦄⚡🦉🌌🐉💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮🎮🎮🚀🎮💎🐉⚡🐉🎮🦊🎮🚀👾🔮⚡🦄🚀👾⚡💎💎🌌⚡🪐⚡🍀👾🍀⚡🚀🎮👾🚀🚀👾🦊⚡💎🌌🚀🎮⚡💎🪐🎮🔥🎮🎮⚡🦄💎🎮🎮🦉⚡🌌🌌💎💎🍀🎮🚀🌌🦉🎮🦄💎🦊🎮💎🎮🔥🌌🚀👾🪐⚡🔥🎮🍀🎮🌟👾🎮⚡🦉⚡🔮🌌👾👾🍀⚡🚀🎮👾🎮🔮👾🦊⚡💎🌌🚀🎮⚡💎🪐🎮🔥⚡🦉🚀💎💎🎮🎮🦉🌌🐉🌌💎💎🍀🎮🚀⚡🪐🌌🪐💎🦊🎮💎🚀⚡🚀🦉👾🪐⚡🔥⚡🦊⚡🪐👾🎮⚡🦉🎮🚀🌌🔥👾🍀⚡🚀🎮🔮🎮🦄👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🍀🌌🍀💎🎮🎮🦉⚡🎮🌌👾💎🍀🎮🚀⚡🪐🌌🪐💎🦊🎮💎🎮🌟🎮🐉👾🪐⚡🔥🎮🍀🚀🍀👾🎮⚡🦉🎮🎮🎮👾👾🍀⚡🚀🎮👾🚀🦄👾🦊⚡💎⚡🔥🚀🚀💎🪐🎮🔥🎮🦊🎮🪐💎🎮🎮🦉⚡⚡⚡🐱💎🍀🎮🚀🎮🎮🎮🍀💎🦊🎮💎⚡🍀⚡🎮👾🪐⚡🔥🎮🦄🎮🔮👾🎮⚡🦉🚀🔥⚡🐉👾🍀⚡🚀🎮🔮🎮🦄👾🦊⚡💎⚡🦊🌌🐱💎🪐🎮🔥🎮🦊🎮🪐💎🎮🎮🦉🌌🔥🎮🐉💎🍀🎮🚀🎮🎮🎮🍀👾🔥🎮🌌⚡🔮👾👾⚡🌟⚡🐱⚡🔮👾🌌⚡🐱🎮🐱🎮💎👾🐱⚡🌌⚡👾⚡🦄👾🌟⚡👾🎮👾🌌🐉💎👾🎮🌟⚡🔥⚡🚀💎🌌🎮🐱⚡🐱⚡💎💎🐱🎮🌌🌌🔥🌌🌌💎🌟🎮👾⚡🪐🚀🎮👾👾⚡🌟⚡🦉🌌🔥👾🌌⚡🐱⚡🌌🎮🎮💎🦄⚡💎⚡🦉";
-const DESCRIPTOR_GROQ_1 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🦊🚀🎮💎🚀🎮🍀⚡🍀🚀🪐💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊⚡🐱🌌🦄👾🚀⚡🍀🎮🍀🌌🪐👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮💎🚀💎💎💎🎮🦊⚡🔥🌌🔥💎🚀🎮🍀⚡🐱⚡⚡💎🦉🎮🎮⚡🎮🚀🦊💎🔥🎮🪐🎮🚀🎮🦉👾💎⚡🦊🎮🔥🌌🦄👾🚀⚡🍀🎮🐱🎮👾👾🦉⚡🎮🚀🌟🚀🪐👾🔥⚡🪐🎮💎🚀⚡💎💎🎮🦊🌌🎮🎮🌌💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐🎮🚀🎮🦉👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦄🎮🐱👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐⚡🚀⚡🦉💎💎🎮🦊⚡🌟⚡🔮💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🌌⚡🌟💎🔥🎮🪐🎮🌌🚀⚡👾💎⚡🦊⚡💎🎮🌟👾🚀⚡🍀⚡🌟🌌🐉👾🦉⚡🎮⚡👾🌌🔮👾🔥⚡🪐🎮💎🌌⚡💎💎🎮🦊⚡🌟⚡🌌👾🎮🎮🐉🎮🌌💎⚡🎮⚡⚡🌌🚀🐉💎🦄🎮🔮⚡🔮🚀🎮💎🐉⚡🐉🎮🐉🚀🍀💎👾⚡🦊⚡🎮👾🎮⚡🦉🚀🔥⚡🐉👾🍀⚡🚀⚡⚡🌌🌌👾🦊⚡💎⚡🐉⚡👾💎🪐🎮🔥🌌🔮🌌🔥💎🎮🎮🦉⚡🌌🌌🐉💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎⚡🍀⚡🎮👾🪐⚡🔥🎮🐱🚀🔥👾🎮⚡🦉🎮🌌🚀💎👾🍀⚡🚀🚀🦉⚡🦄👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🐱🌌🔥💎🎮🎮🦉⚡🎮🚀👾💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎🎮🐉🎮⚡👾🪐⚡🔥🚀💎⚡🔮💎🚀⚡🌟⚡🦄👾🐱⚡🌌🎮🎮🚀🌌👾🌟⚡👾🎮🪐🌌🎮💎👾🎮🌟🌌⚡🎮🪐💎🌌🎮🐱⚡🍀🌌👾💎🐱🎮🌌⚡🌌⚡🚀💎🌟🎮👾⚡👾🚀🦉👾👾⚡🌟🎮🌟🎮🔥👾🌌⚡🐱🚀🔮⚡🦊👾🐱⚡🌌🎮🎮🎮🪐👾🌟⚡👾🎮👾🌌🐉💎👾🎮🌟⚡🌟🌌🔥💎🌌🎮🐱🌌💎🌌👾💎🐱🎮🌌⚡🌌🌌🔮💎🌟🎮👾⚡👾🌌🦉👾👾⚡🌟🎮🦊🎮🍀👾🌌⚡🐱🎮🐱🚀⚡👾🐱⚡🌌🎮🌌🚀🔮👾🌟⚡👾🎮💎⚡🎮💎👾🎮🌟⚡🐉🚀👾💎🌌🎮🐱⚡🍀🌌👾💎🐱🎮🌌⚡🌌🌌🚀💎🌟🎮👾🌌🦄⚡🎮👾👾⚡🌟🎮🦊🎮🍀👾🌌⚡🐱🎮🍀🎮🎮👾🐱⚡🌌🎮🌌🚀🚀👾🌟⚡👾🎮💎⚡💎💎👾🎮🌟⚡🌟🌌🔥💎🌌🎮🐱🌌💎🌌👾💎🐱🎮🌌⚡⚡🚀🐱💎🌟🎮👾⚡👾🚀🦉👾👾⚡🌟⚡🐱⚡🔮👾🌌⚡🐱🎮🐱🌌💎👾🐱⚡🌌🎮🎮🚀🍀👾🌟⚡👾🎮🪐🌌🐱💎👾🎮🌟⚡🦊🌌🪐💎🌌🎮🐱⚡🦉⚡🦊💎🐱🎮🌌⚡🚀⚡🍀💎🌟🎮👾⚡🔮🌌🌌👾👾⚡🌟🎮🦊🚀🪐👾🌌⚡🐱🎮🦄🌌🌟👾🐱⚡🌌🎮🌌🚀🔮👾🌟⚡👾🎮💎⚡💎💎👾🎮🌟🎮🐱🎮🔮💎🌌🎮🐱⚡🍀⚡🎮💎🐱🎮🌌⚡🌌🚀🚀💎🌟🎮👾🎮🌌⚡⚡💎🔮⚡🦉⚡💎👾🚀⚡🍀🎮🐱🎮⚡👾🦉⚡🎮⚡👾🌌🔮";
-const DESCRIPTOR_GROQ_2 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉👾🍀🎮🔮🎮🐱💎🦄🎮🔮⚡🔮🌌👾💎🐉⚡🐉🎮🐉🌌🍀👾🔮⚡🦄🎮🐱🌌🔮👾⚡⚡⚡🚀🌟⚡🔥👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉⚡🌟🚀⚡💎🔮🎮🦄⚡🍀⚡🎮💎⚡🎮⚡🎮🦄⚡🚀💎🦄🎮🔮⚡🔮🌌🎮💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🚀🦊🚀🔮👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄⚡🦄🌌🐱💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮⚡💎🌌🦉💎🐉⚡🐉🎮🔥🚀🚀👾🔮⚡🦄🎮🦉🎮🦉👾⚡⚡⚡⚡🦄🎮🚀👾🦄⚡🔮🎮🪐🎮🦊👾🐉🎮🐉⚡🐉🌌🍀💎🔮🎮🦄⚡🐱🚀🔮💎⚡🎮⚡⚡🎮⚡🔥💎🦄🎮🔮🌌🍀🌌⚡💎🐉⚡🐉🎮🐉🎮🍀👾🔮⚡🦄🚀🪐🚀🐉👾⚡⚡⚡🎮🎮🎮🔥👾🦄⚡🔮🎮🔮🌌🎮👾🐉🎮🐉🌌🎮🌌🦄👾👾🎮🦊🎮🎮💎🎮🎮🦉⚡⚡⚡🐱💎🍀🎮🚀🌌🦄🌌🚀💎🦊🎮💎⚡🪐🎮🐉👾🪐⚡🔥🚀🔮🚀🔥👾🎮⚡🦉🎮🌌🚀🐉👾🍀⚡🚀🚀🦉⚡🦄👾🦊⚡💎⚡🐉⚡👾💎🪐🎮🔥🌌🔮🌌🔥💎🎮🎮🦉⚡🌌🌌🐉💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎⚡🍀⚡🎮👾🪐⚡🔥🎮🐱🚀🔥👾🎮⚡🦉🎮🌌🚀💎👾🍀⚡🚀🚀🦉⚡🦄👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🐱🌌🔥💎🎮🎮🦉⚡🎮🚀👾💎🍀🎮🚀🎮⚡🚀🌌💎🦊🎮💎🎮🐉🎮⚡👾🪐⚡🔥🚀💎⚡🔮💎🚀⚡🌟⚡🦄👾🐱⚡🌌🎮🎮🚀🌌👾🌟⚡👾🎮🪐🌌🐱💎👾🎮🌟⚡🌟⚡🔥💎🌌🎮🐱🎮🔥🚀💎💎🐱🎮🌌🎮🐱⚡🪐💎🌟🎮👾⚡👾🚀🦉👾👾⚡🌟🎮🌟🎮🔥👾🌌⚡🐱⚡🌟⚡🐉👾🐱⚡🌌🎮🌌🚀🔮👾🌟⚡👾🚀🦄🎮🎮💎👾🎮🌟⚡🦊⚡🍀💎🌌🎮🐱⚡🐱🚀💎💎🐱🎮🌌⚡🌌🌌🚀💎🌟🎮👾⚡👾🎮🦉👾👾⚡🌟🎮🐉🌌👾👾🌌⚡🐱⚡🔥🌌💎👾🐱⚡🌌🎮⚡🌌🐱👾🌟⚡👾🎮💎⚡🎮💎👾🎮🌟⚡🌟🌌🔥💎🌌🎮🐱⚡🦉⚡🦉💎🐱🎮🌌⚡🌌🌌🔮💎🌟🎮👾⚡💎🎮💎👾👾⚡🌟🎮🌟🚀🔥👾🌌⚡🐱🎮🐱🌌💎👾🐱⚡🌌🎮🎮🎮🪐💎🐉⚡🚀⚡🔥💎💎🎮🦊⚡🐉🌌🌌💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🌌⚡🦄💎🔥🎮🪐🌌🍀🎮🐱👾💎⚡🦊🎮🌟🎮🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🌌🎮🌟👾🔥⚡🪐⚡🌌🌌⚡💎💎🎮🦊⚡🔥🌌🦄💎🚀🎮🍀🎮🌟🚀🐉💎🦉🎮🎮⚡🚀🌌🔮👾🦊🎮⚡🎮🌟💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦄🌌🦊👾⚡⚡⚡🎮🎮🎮🍀👾🦄⚡🔮🎮🔮🎮🎮👾🐉🎮🐉⚡🔥🌌🚀💎🔮🎮🦄🌌👾🎮💎💎⚡🎮⚡🎮🪐🚀🪐💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉🎮🐉🌌🍀👾🔮⚡🦄🎮🦉🚀🐉👾⚡⚡⚡⚡🪐🌌🪐";
-const DESCRIPTOR_GROQ_3 = "💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮🌌🦊🎮🌟💎🔥🎮🪐⚡🪐🚀🍀👾💎⚡🦊🎮🐉🚀🌌👾🚀⚡🍀🎮🦉🚀🐉👾🦉⚡🎮🎮🚀🚀🔮👾🔥⚡🪐🎮🪐🌌🍀👾🪐🎮🦄🎮👾💎🔮🎮🦄⚡🐱🚀🔮💎⚡🎮⚡🎮🔮🎮🌟💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦄🚀🦊👾⚡⚡⚡🎮⚡🌌🪐👾🦄⚡🔮🎮🔮🚀👾👾🐉🎮🐉⚡🐉🚀🍀💎🔮🎮🦄⚡🍀⚡🎮💎⚡🎮⚡⚡⚡🌌🌌💎🦄🎮🔮⚡🪐⚡🦉💎🐉⚡🐉🎮🔥🚀🦄👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡⚡🦄🎮🚀👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉⚡🔥🌌🦄💎🔮🎮🦄⚡🦉🌌💎💎⚡🎮⚡⚡🚀🌌🔮💎🦄🎮🔮⚡🪐⚡🦊💎🐉⚡🐉🎮🔥🚀🦄👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🎮🚀🚀🔥👾🦄⚡🔮🎮🪐🎮🦊👾🐉🎮🐉⚡🔥🌌🦄💎🔮🎮🦄⚡🍀⚡💎💎⚡🎮⚡⚡⚡🌌🌌💎🦄🎮🔮🎮🎮🚀🎮💎🐉⚡🐉🎮🔥🚀🦄💎👾⚡🦊⚡🎮👾🎮⚡🦉🎮⚡🎮🐉👾🍀⚡🚀🎮🪐🌌🌌👾🦊⚡💎🎮🪐⚡🐉👾💎🎮🐱🎮⚡💎🌌🎮🐱🌌💎🌌👾👾🦄🎮💎🎮🦉💎🔥🎮🪐⚡👾⚡🐉👾💎⚡🦊⚡🐱🌌🦄👾🚀⚡🍀🎮🦄🚀👾👾🦉⚡🎮⚡👾🌌🔮👾🔥⚡🪐🎮👾🎮🐉💎💎🎮🦊🌌🌌🌌🍀💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐🎮🚀🎮🦉👾💎⚡🦊🎮🐉🚀🍀👾🚀⚡🍀🎮🦄🚀🦊👾🦉⚡🎮🚀🦊⚡🌟👾🔥⚡🪐🎮👾🎮🐱💎💎🎮🦊⚡🐉🌌🍀💎🚀🎮🍀⚡🦉🚀🐉💎🦉🎮🎮🎮👾🚀🔮💎🔥🎮🪐⚡👾⚡🐱👾💎⚡🦊🚀🎮⚡🌌💎🎮⚡🐉⚡🌌👾⚡⚡⚡🎮🚀🚀🔮👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄⚡🦉🌌🐉💎⚡🎮⚡🌌🌟🎮🔥💎🦄🎮🔮⚡🔮🌌👾💎🐉⚡🐉🎮🐉🎮🍀👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🎮🎮🎮🔥👾🦄⚡🔮🎮🔮🎮🎮👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄⚡🐱🚀🔮💎⚡🎮⚡⚡🚀⚡🚀💎🦄🎮🔮⚡🔮🌌🎮💎🐉⚡🐉🎮🔥🎮🔥👾🔮⚡🦄🎮🍀🎮💎👾⚡⚡⚡🎮⚡🚀🌌👾🦄⚡🔮🎮🪐🎮🦊👾🐉🎮🐉⚡🐉🌌🌟💎🔮🎮🦄🎮🦊🚀🦊💎⚡🎮⚡⚡⚡🌌🪐💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉🎮🐉🚀🍀💎👾⚡🦊⚡🎮👾🎮⚡🦉🎮🚀🌌🔥👾🍀⚡🚀🎮👾🎮🔮👾🦊⚡💎⚡🐉⚡⚡💎🪐🎮🔥⚡🍀🌌🌟💎🎮🎮🦉⚡⚡⚡🐉💎🍀🎮🚀🌌🦄🌌🚀💎🦊🎮💎🎮🐉🎮⚡👾🪐⚡🔥🚀💎⚡🔮👾🎮⚡🦉⚡🪐⚡🦊👾🍀⚡🚀🎮👾🚀🚀👾🦊⚡💎⚡🌟🌌⚡💎🪐🎮🔥🎮🎮⚡🦄💎🎮🎮🦉⚡🌌🌌🐉💎🍀🎮🚀⚡🪐🚀🌌💎🦊🎮💎🎮🌟🚀⚡👾🪐⚡🔥🎮🦉🌌💎👾🎮⚡🦉🎮⚡🎮🐱👾🍀⚡🚀🎮👾🎮🔮👾🦊⚡💎⚡🐉⚡👾💎🪐🎮🔥⚡🍀🚀🌟👾🚀🎮🌟🎮🦄💎🐱🎮🌌🎮👾🎮🦄💎🌟🎮👾⚡👾🌌🦉👾👾⚡🌟🚀⚡⚡🪐👾🌌⚡🐱🚀💎🚀👾";
-
-const DESCRIPTORS_GROQ = [
-  DESCRIPTOR_GROQ_0,
-  DESCRIPTOR_GROQ_1,
-  DESCRIPTOR_GROQ_2,
-  DESCRIPTOR_GROQ_3
-];
-
-const DESCRIPTOR_GROQ = DESCRIPTOR_GROQ_0;
-const DESCRIPTOR_EMIS = "👾🪐🎮🦄🎮👾💎🔮🎮🦄⚡🦄🌌🦊💎⚡🎮⚡⚡⚡🌌🪐💎🦄🎮🔮⚡👾🚀🦄💎🐉⚡🐉🎮🦊🎮🚀👾🔮⚡🦄🎮🦄🚀🦊👾⚡⚡⚡🎮⚡🎮🪐👾🦄⚡🔮🎮💎🎮💎👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄⚡🦉🌌💎💎⚡🎮⚡⚡🚀🌌🔮💎🦄🎮🔮⚡🔮🌌🎮💎🐉⚡🐉🎮🦊🎮🪐👾🔮⚡🦄🎮🦉🚀💎👾⚡⚡⚡⚡🔮⚡🌟👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉⚡🐉🌌🍀💎🔮🎮🦄⚡🦄🌌🦊💎⚡🎮⚡⚡⚡🚀🪐💎🦄🎮🔮⚡🪐⚡🦊💎🐉⚡🐉🎮🐉🚀🍀👾🔮⚡🦄🎮🦄🚀🦊👾⚡⚡⚡🚀🌟⚡🔥👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉🎮🔮⚡🔥💎🔮🎮🦄⚡🦄🌌🐱💎⚡🎮⚡⚡🚀🌌🔥💎🦄🎮🔮⚡💎⚡💎💎🐉⚡🐉⚡🦄⚡🌌👾🔮⚡🦄🎮🦉🚀💎👾⚡⚡⚡🎮🎮🎮🔥👾🦄⚡🔮🎮💎🚀🦉👾🐉🎮🐉⚡🦊⚡🪐💎🔮🎮🦄⚡🍀⚡🎮👾🌌🎮🪐🎮🍀💎🍀🎮🚀⚡👾🌌🚀💎🦊🎮💎🎮🦊🎮🐱👾🪐⚡🔥🎮🐱🚀🔥👾🎮⚡🦉🎮🎮🌌👾👾🍀⚡🚀🎮👾🚀🚀👾🦊⚡💎🎮🦄🚀🐱💎🪐🎮🔥⚡🐱🌌🔥💎🎮🎮🦉⚡🌌⚡⚡💎🍀🎮🚀🎮🦊⚡🔮💎🦊🎮💎🎮🌟🚀⚡💎💎⚡🐱⚡⚡👾🌌⚡🐱🎮🍀🚀🦊👾🐱⚡🌌🚀🐉⚡🍀👾🌟⚡👾🎮👾🚀🦉💎👾🎮🌟🎮👾⚡🍀💎🌌🎮🐱⚡🦄🚀🌟💎🐱🎮🌌🌌🐉🎮🍀💎🌟🎮👾⚡💎🎮🎮👾👾⚡🌟⚡🦉🌌🔥👾🌌⚡🐱🎮🐱🚀⚡👾🐱⚡🌌⚡🐱🎮🪐👾🌟⚡👾🎮👾🌌🐉💎👾🎮🌟⚡🌟⚡🔥💎🌌🎮🐱🌌💎🌌👾💎🐱🎮🌌⚡🎮🌌🌌💎🌟🎮👾⚡🔮🌌🌌👾👾⚡🌟🚀🚀🚀🌟👾🌌⚡🐱🎮🍀🎮🎮👾🐱⚡🌌🚀🐉⚡🍀👾🌟⚡👾🎮🪐🌌🐱👾🔮🎮🦉🎮💎💎🚀🎮🍀⚡🦄🌌👾💎🦉🎮🎮⚡🚀🚀🔮💎🔥🎮🪐⚡🔮⚡👾👾💎⚡🦊🎮🔥🌌🦄👾🚀⚡🍀🎮🦄🚀👾👾🦉⚡🎮🎮🌌🎮🌟👾🔥⚡🪐🎮🪐🌌🍀💎💎🎮🦊⚡🦊🚀🎮💎🚀🎮🍀⚡🦉🌌🐉💎🦉🎮🎮⚡🎮🚀🦊💎🔥🎮🪐🌌🍀🎮🐱👾💎⚡🦊🎮🐉🎮🌟💎🎮⚡🐉⚡🌌👾⚡⚡⚡🎮🌌🌌🐉👾🦄⚡🔮🎮🪐🎮🦉👾🐉🎮🐉⚡🔥🌌🚀💎🔮🎮🦄⚡🍀⚡💎💎⚡🎮⚡⚡🚀🌌🔥💎🦄🎮🔮🎮⚡🎮🐱💎🐉⚡🐉🎮🔥🚀🚀👾🔮⚡🦄⚡⚡🎮🦉👾⚡⚡⚡⚡🔮⚡🌟👾🦄⚡🔮⚡⚡⚡🐱👾🐉🎮🐉⚡🌟🚀⚡";
-
 let activeGroqKeyIndex = 0;
 const groqKeyCooldowns = new Map<string, number>();
 
@@ -101,6 +23,14 @@ export function isGroqKeyCooledDown(key: string): boolean {
     return false;
   }
   return true;
+}
+
+function parseKeyList(val?: string): string[] {
+  if (!val) return [];
+  return val
+    .split(/[\n,;]+/)
+    .map(k => k.trim())
+    .filter(Boolean);
 }
 
 export function resolveGroqKeys(req?: Request): string[] {
@@ -122,37 +52,32 @@ export function resolveGroqKeys(req?: Request): string[] {
     }
   }
 
-  // 2. Unpack the embedded key pool
-  const embeddedKeys: string[] = [];
-  for (const descriptor of DESCRIPTORS_GROQ) {
-    const unpacked = unpackDescriptor(descriptor);
-    if (unpacked && !seen.has(unpacked)) {
-      embeddedKeys.push(unpacked);
-      seen.add(unpacked);
-    }
-  }
+  // 2. Environment variables from container / Cloud Run
+  const envKeys: string[] = [
+    ...parseKeyList(process.env.GROQ_API_KEYS),
+    ...parseKeyList(process.env.GROQ_API_KEY),
+    ...parseKeyList(process.env.GROQ_KEY)
+  ];
 
-  // 3. Environment variable fallback if not already in pool
-  if (process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim()) {
-    const k = process.env.GROQ_API_KEY.trim();
+  for (const k of envKeys) {
     if (!seen.has(k)) {
-      embeddedKeys.push(k);
       seen.add(k);
+      result.push(k);
     }
   }
 
   // Prioritize healthy keys, rotating from activeGroqKeyIndex
-  if (embeddedKeys.length > 0) {
-    const normalizedIndex = activeGroqKeyIndex % embeddedKeys.length;
+  if (result.length > 1) {
+    const normalizedIndex = activeGroqKeyIndex % result.length;
     const rotated = [
-      ...embeddedKeys.slice(normalizedIndex),
-      ...embeddedKeys.slice(0, normalizedIndex)
+      ...result.slice(normalizedIndex),
+      ...result.slice(0, normalizedIndex)
     ];
 
     const healthy = rotated.filter(k => !isGroqKeyCooledDown(k));
     const cooling = rotated.filter(k => isGroqKeyCooledDown(k));
 
-    result.push(...healthy, ...cooling);
+    return [...healthy, ...cooling];
   }
 
   return result;
@@ -174,14 +99,16 @@ export function resolveEmisKey(req?: Request): string {
   if (process.env.EMIS_API_KEY && process.env.EMIS_API_KEY.trim()) {
     return process.env.EMIS_API_KEY.trim();
   }
-  return unpackDescriptor(DESCRIPTOR_EMIS);
+  return "";
 }
 
 export function advanceGroqKey(fromIndex?: number): void {
+  const keys = resolveGroqKeys();
+  if (keys.length === 0) return;
   if (typeof fromIndex === "number") {
-    activeGroqKeyIndex = (fromIndex + 1) % DESCRIPTORS_GROQ.length;
+    activeGroqKeyIndex = (fromIndex + 1) % keys.length;
   } else {
-    activeGroqKeyIndex = (activeGroqKeyIndex + 1) % DESCRIPTORS_GROQ.length;
+    activeGroqKeyIndex = (activeGroqKeyIndex + 1) % keys.length;
   }
 }
 
@@ -559,7 +486,6 @@ async function handleGroqChat(req: Request, res: Response, options: GroqChatOpti
   ];
 
   try {
-    const embeddedPool = DESCRIPTORS_GROQ.map(d => unpackDescriptor(d)).filter(Boolean);
     let upstreamRes: any = null;
     let successfulModel = requestedModel;
     let wasFallbackSwitched = Boolean(isFailover);
@@ -592,7 +518,7 @@ async function handleGroqChat(req: Request, res: Response, options: GroqChatOpti
           if (fetchRes.ok) {
             upstreamRes = fetchRes;
             successfulModel = candidate;
-            const keyIndex = embeddedPool.indexOf(activeKey);
+            const keyIndex = groqKeys.indexOf(activeKey);
             if (keyIndex !== -1) {
               activeGroqKeyIndex = keyIndex;
             }
