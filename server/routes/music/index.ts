@@ -8,7 +8,7 @@ import { RESOLVE_BUDGET_MS, searchSaavn } from "./fullLength";
 import { buildQueries, identityMismatch } from "./match";
 import { searchYouTubeRaw } from "./youtubeStream";
 import { searchSoundCloudTracks } from "./soundcloudApi";
-import { isYtDlpAvailable, probeYtDlp, ytDlpBinaryPath, ytDlpConfig } from "./ytdlp";
+import { isYtDlpAvailable, probeYtDlp, ytDlpBinaryPath, ytDlpConfig, ytDlpMaxConcurrent } from "./ytdlp";
 
 const musicRouter = express.Router();
 
@@ -328,7 +328,12 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
     target: identity,
     query,
     budgetMs: RESOLVE_BUDGET_MS,
-    ytDlp: { available: isYtDlpAvailable(), path: ytDlpBinaryPath(), configured: ytDlpConfig() },
+    ytDlp: {
+      available: isYtDlpAvailable(),
+      path: ytDlpBinaryPath(),
+      maxConcurrent: ytDlpMaxConcurrent(),
+      configured: ytDlpConfig(),
+    },
     ytDlpProbe,
     backends: [saavn, youtube, soundcloud],
     totalMs: Date.now() - startedAt,

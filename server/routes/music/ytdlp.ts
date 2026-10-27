@@ -141,8 +141,18 @@ export function ytDlpConfig(): {
   };
 }
 
-/** yt-dlp costs ~100MB of memory per process; never run more than this at once. */
-const MAX_CONCURRENT = 2;
+/**
+ * yt-dlp costs real memory per process, and an instance that runs out answers
+ * 503 — which looks exactly like a hung request. One at a time by default, since
+ * extraction is a fallback and the caller is already inside its deadline; raise
+ * it with `YT_DLP_MAX_CONCURRENT` on a host with memory to spare.
+ */
+const MAX_CONCURRENT = Math.max(1, Number(process.env.YT_DLP_MAX_CONCURRENT) || 1);
+
+/** How many extractions may run at once, for diagnostics. */
+export function ytDlpMaxConcurrent(): number {
+  return MAX_CONCURRENT;
+}
 const SPAWN_TIMEOUT_MS = 12000;
 const CACHE_TTL_MS = 20 * 60 * 1000;
 
