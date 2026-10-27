@@ -1,130 +1,118 @@
 import { Router, Request, Response } from "express";
 
+/**
+ * AI proxy — the server half of the AI chat.
+ *
+ * The rule this file exists to enforce:
+ *   API keys live in server environment variables and nowhere else.
+ *
+ * How a request flows:
+ *   browser (src/ai/AiChat.tsx)
+ *     -> POST /api/ai/chat            (no key, just the conversation)
+ *       -> this router adds `Authorization: Bearer <secret key>`
+ *         -> upstream AI API (Groq / Emis)
+ *       <- answer streamed back to the browser
+ *
+ * The browser can therefore be inspected all day and never see a key. Nothing
+ * under src/ knows a key exists, so nothing under src/ can leak one.
+ */
+
 const aiRouter = Router();
 
-const EMIS_BASE_URL = "https://emis.zxs-is-very.cool/v1";
-const GROQ_BASE_URL = "https://api.groq.com/openai/v1";
+/* ------------------------------------------------------------------ *
+ * 1. Config
+ * ------------------------------------------------------------------ */
 
-let activeGroqKeyIndex = 0;
-const groqKeyCooldowns = new Map<string, number>();
+const EMIS_BASE_URL = (process.env.EMIS_BASE_URL || "https://emis.zxs-is-very.cool/v1").replace(/\/+$/, "");
+const GROQ_BASE_URL = (process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
 
-export function markGroqKeyCooldown(key: string, durationMs = 60 * 1000): void {
-  if (!key) return;
-  groqKeyCooldowns.set(key, Date.now() + durationMs);
-  console.warn(`[Groq Key Pool] Key ...${key.slice(-6)} placed on cooldown for ${Math.round(durationMs / 1000)}s.`);
+const UPSTREAM_TIMEOUT_MS = 45_000; // time allowed to get an answer started
+const KEY_COOLDOWN_MS = 60_000; // how long a rate-limited key sits out
+const PROVIDER_COOLDOWN_MS = 60_000; // how long a broken provider sits out
+const MODELS_CACHE_MS = 10 * 60_000; // model lists barely change
+
+const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
+const DEFAULT_EMIS_MODEL = "claude-fable-5-1";
+
+// Emis blocks requests without a browser-looking User-Agent.
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+/**
+ * Reads a key list from one or more env vars.
+ * Accepts "key1,key2", "key1 key2", "key1;key2" or one key per line, because
+ * pasting a list into a dashboard always produces a slightly different format.
+ */
+function readKeyList(...names: string[]): string[] {
+  const keys: string[] = [];
+  for (const name of names) {
+    const raw = process.env[name];
+    if (!raw) continue;
+    for (const piece of raw.split(/[\s,;]+/)) {
+      const key = piece.trim();
+      if (key && !keys.includes(key)) keys.push(key);
+    }
+  }
+  return keys;
 }
 
-export function isGroqKeyCooledDown(key: string): boolean {
-  if (!key) return false;
-  const cooldownUntil = groqKeyCooldowns.get(key);
-  if (!cooldownUntil) return false;
-  if (Date.now() > cooldownUntil) {
-    groqKeyCooldowns.delete(key);
+// Read on every call instead of once at the top of the file: server.ts loads
+// .env *after* the module imports have already run, so a top-level read would
+// see nothing on a fresh `npm run dev`. Reading process.env is cheap.
+const groqKeys = () => readKeyList("GROQ_API_KEYS", "GROQ_API_KEY");
+const emisKey = () => (process.env.EMIS_API_KEY || "").trim();
+const hasGroq = () => groqKeys().length > 0;
+const hasEmis = () => emisKey().length > 0;
+
+/* ------------------------------------------------------------------ *
+ * 2. Health bookkeeping
+ *    Plain memory, reset whenever the server restarts. A key that gets
+ *    rate limited is skipped for a minute instead of being retried into
+ *    the same error, and a provider that errors is retried a minute later
+ *    instead of being disabled forever.
+ * ------------------------------------------------------------------ */
+
+const keyCooldownUntil = new Map<string, number>();
+let nextGroqKeyIndex = 0;
+
+let emisCooldownUntil = 0;
+let emisLastError = "";
+
+function isCoolingDown(key: string): boolean {
+  const until = keyCooldownUntil.get(key);
+  if (!until) return false;
+  if (Date.now() >= until) {
+    keyCooldownUntil.delete(key);
     return false;
   }
   return true;
 }
 
-function parseKeyList(val?: string): string[] {
-  if (!val) return [];
-  return val
-    .split(/[\n,;]+/)
-    .map(k => k.trim())
-    .filter(Boolean);
+function coolDownKey(key: string, ms = KEY_COOLDOWN_MS): void {
+  keyCooldownUntil.set(key, Date.now() + ms);
+  console.warn(`[ai] Groq key ...${key.slice(-6)} resting for ${Math.round(ms / 1000)}s`);
 }
 
-export function resolveGroqKeys(req?: Request): string[] {
-  const result: string[] = [];
-  const seen = new Set<string>();
-
-  // 1. User supplied explicit request header or body
-  const headerKey = req ? (req.headers?.["x-groq-api-key"] as string) : "";
-  if (headerKey && headerKey.trim()) {
-    const k = headerKey.trim();
-    result.push(k);
-    seen.add(k);
-  }
-  if (req?.body?.groqApiKey && typeof req.body.groqApiKey === "string" && req.body.groqApiKey.trim()) {
-    const k = req.body.groqApiKey.trim();
-    if (!seen.has(k)) {
-      result.push(k);
-      seen.add(k);
-    }
-  }
-
-  // 2. Environment variables from container / Cloud Run
-  const envKeys: string[] = [
-    ...parseKeyList(process.env.GROQ_API_KEYS),
-    ...parseKeyList(process.env.GROQ_API_KEY),
-    ...parseKeyList(process.env.GROQ_KEY)
-  ];
-
-  for (const k of envKeys) {
-    if (!seen.has(k)) {
-      seen.add(k);
-      result.push(k);
-    }
-  }
-
-  // Prioritize healthy keys, rotating from activeGroqKeyIndex
-  if (result.length > 1) {
-    const normalizedIndex = activeGroqKeyIndex % result.length;
-    const rotated = [
-      ...result.slice(normalizedIndex),
-      ...result.slice(0, normalizedIndex)
-    ];
-
-    const healthy = rotated.filter(k => !isGroqKeyCooledDown(k));
-    const cooling = rotated.filter(k => isGroqKeyCooledDown(k));
-
-    return [...healthy, ...cooling];
-  }
-
-  return result;
+/** Groq keys in the order we should try them: healthy first, rotating each request. */
+function orderedGroqKeys(): string[] {
+  const keys = groqKeys();
+  if (keys.length <= 1) return keys;
+  const start = nextGroqKeyIndex % keys.length;
+  const rotated = [...keys.slice(start), ...keys.slice(0, start)];
+  return [...rotated.filter((k) => !isCoolingDown(k)), ...rotated.filter(isCoolingDown)];
 }
 
-export function resolveGroqKey(req?: Request): string {
-  const keys = resolveGroqKeys(req);
-  return keys[0] || "";
+const emisAvailable = () => hasEmis() && Date.now() >= emisCooldownUntil;
+
+function coolDownEmis(reason: string): void {
+  emisCooldownUntil = Date.now() + PROVIDER_COOLDOWN_MS;
+  emisLastError = reason;
+  console.warn(`[ai] Emis resting for ${PROVIDER_COOLDOWN_MS / 1000}s (${reason})`);
 }
 
-export function resolveEmisKey(req?: Request): string {
-  const headerKey = req ? (req.headers?.["x-emis-api-key"] as string) : "";
-  if (headerKey && headerKey.trim()) {
-    return headerKey.trim();
-  }
-  if (req?.body?.emisApiKey && typeof req.body.emisApiKey === "string" && req.body.emisApiKey.trim()) {
-    return req.body.emisApiKey.trim();
-  }
-  if (process.env.EMIS_API_KEY && process.env.EMIS_API_KEY.trim()) {
-    return process.env.EMIS_API_KEY.trim();
-  }
-  return "";
-}
-
-export function advanceGroqKey(fromIndex?: number): void {
-  const keys = resolveGroqKeys();
-  if (keys.length === 0) return;
-  if (typeof fromIndex === "number") {
-    activeGroqKeyIndex = (fromIndex + 1) % keys.length;
-  } else {
-    activeGroqKeyIndex = (activeGroqKeyIndex + 1) % keys.length;
-  }
-}
-
-export function resolveGeminiKey(req?: Request): string {
-  const headerKey = req ? (req.headers?.["x-gemini-api-key"] as string) : "";
-  if (headerKey && headerKey.trim()) {
-    return headerKey.trim();
-  }
-  if (req?.body?.geminiApiKey && typeof req.body.geminiApiKey === "string" && req.body.geminiApiKey.trim()) {
-    return req.body.geminiApiKey.trim();
-  }
-  if (process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim()) {
-    return process.env.GEMINI_API_KEY.trim();
-  }
-  return "";
-}
+/* ------------------------------------------------------------------ *
+ * 3. Model catalogs
+ * ------------------------------------------------------------------ */
 
 interface ModelInfo {
   id: string;
@@ -139,31 +127,18 @@ interface ModelInfo {
   video?: boolean;
 }
 
-// In-memory cache for models
-let cachedEmisModels: ModelInfo[] | null = null;
-let lastEmisCacheTime = 0;
-let emisExhausted = false;
-let emisExhaustedReason = "";
-
-let cachedGroqModels: ModelInfo[] | null = null;
-let lastGroqCacheTime = 0;
-
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-
-// Groq Verified Chat Models Catalog
-export const GROQ_FALLBACK_MODELS: ModelInfo[] = [
-  { id: "openai/gpt-oss-120b", label: "GPT OSS 120B (Recommended)", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning accelerated on Groq LPUs." },
-  { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput on Groq." },
-  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", owned_by: "qwen", description: "Multimodal and multilingual open model with strong analytical reasoning." },
+// Shown when Groq's /models call fails or no key is configured yet.
+const GROQ_FALLBACK_MODELS: ModelInfo[] = [
+  { id: "openai/gpt-oss-120b", label: "GPT OSS 120B (Recommended)", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning on Groq LPUs." },
+  { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput." },
+  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", owned_by: "qwen", description: "Multimodal, multilingual open model with strong analytical reasoning." },
   { id: "allam-2-7b", label: "ALLaM 2 7B", owned_by: "sdaia", description: "Bilingual Arabic and English language model." },
-  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile", owned_by: "meta", description: "Flagship open weights model with state-of-the-art general intelligence, math, and coding." },
-  { id: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 Distill 70B", owned_by: "deepseek", description: "Advanced chain-of-thought reasoning model distilled from DeepSeek R1." },
-  { id: "deepseek-r1-distill-qwen-32b", label: "DeepSeek R1 Distill Qwen 32B", owned_by: "deepseek", description: "Fast mathematical and logical reasoning model." },
-  { id: "llama-3.1-70b-versatile", label: "Llama 3.1 70B Versatile", owned_by: "meta", description: "Large-scale intelligence with deep contextual understanding." },
-  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." }
+  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile", owned_by: "meta", description: "State-of-the-art open weights model for general intelligence, math and coding." },
+  { id: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 Distill 70B", owned_by: "deepseek", description: "Chain-of-thought reasoning distilled from DeepSeek R1." },
+  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." },
 ];
 
-// Fallback list of popular Emis models
+// Shown when Emis is unreachable or has no key configured yet.
 const DEFAULT_EMIS_MODELS: ModelInfo[] = [
   { id: "claude-fable-5-1", label: "Claude Fable 5.1 (Recommended)", owned_by: "anthropic", description: "Fast, creative writing and high-intelligence assistance." },
   { id: "claude-sonnet-5", label: "Claude Sonnet 5", owned_by: "anthropic", description: "Smart, nuanced, and excellent at coding." },
@@ -171,662 +146,460 @@ const DEFAULT_EMIS_MODELS: ModelInfo[] = [
   { id: "glm-5.3", label: "GLM-5.3", owned_by: "zhipu", description: "Flagship balanced powerhouse model." },
   { id: "gpt-5.6-sol", label: "GPT-5.6 Sol", owned_by: "openai", description: "Next-gen GPT model with sharp logic." },
   { id: "gpt-6-astra", label: "GPT-6 Astra", owned_by: "openai", description: "Ultra-fast intelligent responses." },
-  { id: "gpt-5.6-terra", label: "GPT-5.6 Terra", owned_by: "openai", description: "Robust general-purpose assistant." },
   { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", owned_by: "google", description: "Lightning-fast responses." },
   { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", owned_by: "google", description: "Complex problem solving and coding." },
-  { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", owned_by: "google", description: "State-of-the-art fast multimodal logic." },
-  { id: "deepseek-v4-flash", label: "DeepSeek V4 Flash", owned_by: "deepseek", description: "Efficient and smart reasoning." },
   { id: "deepseek-v4-pro-0813", label: "DeepSeek V4 Pro", owned_by: "deepseek", description: "Deep thinking and detailed code." },
   { id: "grok-4.3", label: "Grok 4.3", owned_by: "xai", description: "Witty, straightforward, and capable." },
-  { id: "qwen3.8-max", label: "Qwen 3.8 Max", owned_by: "qwen", description: "Heavyweight multilingual reasoning." },
   { id: "qwen3-coder-plus", label: "Qwen 3 Coder Plus", owned_by: "qwen", description: "Specialized in software engineering." },
-  { id: "minimax-m3", label: "MiniMax M3", owned_by: "minimax", description: "Rich context conversational model." }
+  { id: "minimax-m3", label: "MiniMax M3", owned_by: "minimax", description: "Rich context conversational model." },
 ];
 
-// Helper to filter out non-chat models (e.g. classification, guardrails, speech, transcription)
-function isGroqChatModel(m: any): boolean {
-  if (m.active === false) return false;
-  const id = (m.id || "").toLowerCase();
-  // Filter out classification, moderation and guard models (prevents "text classification models do not support streaming")
-  if (id.includes("prompt-guard") || id.includes("safeguard") || id.includes("guard")) return false;
-  // Filter out audio and speech models
-  if (id.includes("whisper") || id.includes("orpheus") || id.includes("canopylabs")) return false;
-  if (m.output_modalities && !m.output_modalities.includes("text")) return false;
-  if (m.output_modalities && (m.output_modalities.includes("speech") || m.output_modalities.includes("transcription"))) return false;
+let emisModelsCache: { at: number; models: ModelInfo[] } | null = null;
+let groqModelsCache: { at: number; models: ModelInfo[] } | null = null;
+
+/** One upstream call with the secret key attached and a hard timeout. */
+function upstreamFetch(url: string, key: string, init: RequestInit = {}) {
+  return fetch(url, {
+    ...init,
+    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+      ...((init.headers as Record<string, string>) || {}),
+    },
+  });
+}
+
+/** Pull a readable message out of an upstream error body. */
+async function readErrorMessage(response: globalThis.Response, fallback: string): Promise<string> {
+  try {
+    const text = await response.text();
+    try {
+      const parsed = JSON.parse(text);
+      return parsed?.error?.message || parsed?.message || text.slice(0, 200) || fallback;
+    } catch {
+      return text.slice(0, 200) || fallback;
+    }
+  } catch {
+    return fallback;
+  }
+}
+
+function isGroqChatModel(model: any): boolean {
+  if (!model || model.active === false) return false;
+  const id = String(model.id || "").toLowerCase();
+  if (id.includes("guard")) return false; // safety classifiers can't stream chat
+  if (id.includes("whisper") || id.includes("orpheus")) return false; // audio
+  const outputs = model.output_modalities;
+  if (Array.isArray(outputs) && (!outputs.includes("text") || outputs.includes("speech") || outputs.includes("transcription"))) {
+    return false;
+  }
   return true;
 }
 
-// Helper to fetch Groq models
-async function getGroqModels(groqKey?: string): Promise<ModelInfo[]> {
-  const now = Date.now();
-  if (cachedGroqModels && (now - lastGroqCacheTime < CACHE_TTL_MS)) {
-    return cachedGroqModels;
-  }
+async function fetchGroqModels(): Promise<ModelInfo[]> {
+  if (groqModelsCache && Date.now() - groqModelsCache.at < MODELS_CACHE_MS) return groqModelsCache.models;
+  if (!hasGroq()) return GROQ_FALLBACK_MODELS;
 
-  const keys = groqKey ? [groqKey] : resolveGroqKeys();
-  for (const k of keys) {
+  for (const key of orderedGroqKeys()) {
     try {
-      const groqRes = await fetch(`${GROQ_BASE_URL}/models`, {
-        headers: {
-          Authorization: `Bearer ${k}`
-        }
+      const response = await upstreamFetch(`${GROQ_BASE_URL}/models`, key);
+      if (!response.ok) continue; // bad key for example; try the next one
+      const data: any = await response.json();
+      const chatModels = Array.isArray(data?.data) ? data.data.filter(isGroqChatModel) : [];
+      if (chatModels.length === 0) continue;
+
+      const models: ModelInfo[] = chatModels.map((m: any) => {
+        const known = GROQ_FALLBACK_MODELS.find((f) => f.id === m.id);
+        return {
+          id: m.id,
+          label: known?.label || m.name || m.id,
+          owned_by: m.owned_by || "groq",
+          description: known?.description || `Groq LPU accelerated ${m.name || m.id}`,
+        };
       });
-      if (groqRes.ok) {
-        const data: any = await groqRes.json();
-        if (Array.isArray(data.data) && data.data.length > 0) {
-          const chatModels = data.data.filter(isGroqChatModel);
-          if (chatModels.length > 0) {
-            cachedGroqModels = chatModels.map((m: any) => {
-              const matchingFallback = GROQ_FALLBACK_MODELS.find(f => f.id === m.id);
-              return {
-                id: m.id,
-                label: matchingFallback?.label || m.name || m.id.replace(/-/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()),
-                owned_by: m.owned_by || "groq",
-                description: matchingFallback?.description || `Groq LPU accelerated ${m.name || m.id}`
-              };
-            });
+      models.sort((a, b) => {
+        const ai = GROQ_FALLBACK_MODELS.findIndex((f) => f.id === a.id);
+        const bi = GROQ_FALLBACK_MODELS.findIndex((f) => f.id === b.id);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return (a.label || "").localeCompare(b.label || "");
+      });
 
-            // Prioritize recommended model
-            cachedGroqModels.sort((a, b) => {
-              const orderA = GROQ_FALLBACK_MODELS.findIndex(f => f.id === a.id);
-              const orderB = GROQ_FALLBACK_MODELS.findIndex(f => f.id === b.id);
-              if (orderA !== -1 && orderB !== -1) return orderA - orderB;
-              if (orderA !== -1) return -1;
-              if (orderB !== -1) return 1;
-              return a.label?.localeCompare(b.label || "") || 0;
-            });
-
-            lastGroqCacheTime = now;
-            return cachedGroqModels;
-          }
-        }
-      }
+      groqModelsCache = { at: Date.now(), models };
+      return models;
     } catch (err: any) {
-      console.error("Failed to fetch models from Groq API:", err?.message || err);
+      console.error("[ai] Groq /models failed:", err?.message || err);
     }
   }
 
-  return GROQ_FALLBACK_MODELS;
+  return groqModelsCache?.models || GROQ_FALLBACK_MODELS;
 }
 
-// Helper to fetch Emis models
-async function getEmisModels(userKey: string): Promise<ModelInfo[]> {
-  const now = Date.now();
-  if (cachedEmisModels && (now - lastEmisCacheTime < CACHE_TTL_MS) && userKey === resolveEmisKey()) {
-    return cachedEmisModels;
-  }
+async function fetchEmisModels(): Promise<ModelInfo[]> {
+  if (emisModelsCache && Date.now() - emisModelsCache.at < MODELS_CACHE_MS) return emisModelsCache.models;
+  if (!hasEmis()) return DEFAULT_EMIS_MODELS;
 
   try {
-    const upstreamRes = await fetch(`${EMIS_BASE_URL}/models`, {
-      headers: {
-        Authorization: `Bearer ${userKey}`,
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-      }
+    const response = await upstreamFetch(`${EMIS_BASE_URL}/models`, emisKey(), {
+      headers: { "User-Agent": BROWSER_USER_AGENT },
+    });
+    if (!response.ok) {
+      coolDownEmis(await readErrorMessage(response, `Emis HTTP ${response.status}`));
+      return emisModelsCache?.models || DEFAULT_EMIS_MODELS;
+    }
+
+    const data: any = await response.json();
+    if (!Array.isArray(data?.data) || data.data.length === 0) return DEFAULT_EMIS_MODELS;
+
+    const models: ModelInfo[] = data.data.map((m: any) => ({
+      id: m.id,
+      label: m.label || m.id,
+      owned_by: m.owned_by || "ai",
+      description: m.description,
+      premium: m.premium,
+      tools: m.tools,
+      vision: m.vision,
+      image: m.image,
+      audio: m.audio,
+      video: m.video,
+    }));
+    models.sort((a, b) => {
+      if (a.id === DEFAULT_EMIS_MODEL) return -1;
+      if (b.id === DEFAULT_EMIS_MODEL) return 1;
+      return (a.label || a.id).localeCompare(b.label || b.id);
     });
 
-    if (upstreamRes.ok) {
-      const data: any = await upstreamRes.json();
-      if (Array.isArray(data.data) && data.data.length > 0) {
-        emisExhausted = false;
-        emisExhaustedReason = "";
-
-        cachedEmisModels = data.data.map((m: any) => ({
-          id: m.id,
-          label: m.label || m.id,
-          owned_by: m.owned_by || "ai",
-          description: m.description,
-          premium: m.premium,
-          tools: m.tools,
-          vision: m.vision,
-          image: m.image,
-          audio: m.audio,
-          video: m.video
-        }));
-
-        cachedEmisModels.sort((a, b) => {
-          if (a.id === "claude-fable-5-1") return -1;
-          if (b.id === "claude-fable-5-1") return 1;
-          if (a.id === "claude-sonnet-5") return -1;
-          if (b.id === "claude-sonnet-5") return 1;
-          return (a.label || a.id).localeCompare(b.label || b.id);
-        });
-
-        lastEmisCacheTime = now;
-        return cachedEmisModels;
-      }
-    } else {
-      const errorText = await upstreamRes.text();
-      emisExhausted = true;
-      emisExhaustedReason = `Emis API reached usage limit or requires verification (HTTP ${upstreamRes.status})`;
-      console.warn("Emis API returned error:", upstreamRes.status, errorText.slice(0, 120));
-    }
+    emisModelsCache = { at: Date.now(), models };
+    return models;
   } catch (err: any) {
-    emisExhausted = true;
-    emisExhaustedReason = err?.message || "Failed to reach Emis API";
-    console.error("Failed to fetch models from Emis API:", err?.message || err);
+    coolDownEmis(err?.message || "Failed to reach Emis");
+    return emisModelsCache?.models || DEFAULT_EMIS_MODELS;
   }
-
-  return cachedEmisModels || DEFAULT_EMIS_MODELS;
 }
 
-// GET /api/ai/status - check server environment and active keys
-aiRouter.get("/ai/status", (req: Request, res: Response) => {
-  const serverHasGroq = Boolean(process.env.GROQ_API_KEY && process.env.GROQ_API_KEY.trim());
-  const serverHasGemini = Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.trim());
-  const serverHasEmis = Boolean(process.env.EMIS_API_KEY && process.env.EMIS_API_KEY.trim());
+/* ------------------------------------------------------------------ *
+ * 4. Chat calls
+ * ------------------------------------------------------------------ */
 
-  const activeGroq = Boolean(resolveGroqKey(req));
-  const activeGemini = Boolean(resolveGeminiKey(req));
-  const activeEmis = Boolean(resolveEmisKey(req));
-
-  const isCloudRun = Boolean(process.env.K_SERVICE || process.env.K_REVISION || process.env.CLOUD_RUN_JOB);
-
-  return res.json({
-    isCloudRun,
-    serverEnvKeys: {
-      groq: serverHasGroq,
-      gemini: serverHasGemini,
-      emis: serverHasEmis
-    },
-    activeKeys: {
-      hasGroqKey: activeGroq,
-      hasGeminiKey: activeGemini,
-      hasEmisKey: activeEmis
-    }
-  });
-});
-
-// POST /api/ai/verify-key - test whether an API key works
-aiRouter.post("/ai/verify-key", async (req: Request, res: Response) => {
-  const { provider, key } = req.body || {};
-  if (!key || typeof key !== "string" || !key.trim()) {
-    return res.status(400).json({ valid: false, message: "No API key was provided." });
-  }
-
-  const cleanKey = key.trim();
-
-  if (provider === "groq") {
-    try {
-      const response = await fetch(`${GROQ_BASE_URL}/models`, {
-        headers: { Authorization: `Bearer ${cleanKey}` }
-      });
-      if (response.ok) {
-        return res.json({ valid: true, message: "Groq API key is valid and connected!" });
-      }
-      const data: any = await response.json().catch(() => ({}));
-      return res.json({ valid: false, message: data?.error?.message || `Groq returned HTTP ${response.status}` });
-    } catch (e: any) {
-      return res.json({ valid: false, message: e?.message || "Failed to contact Groq API." });
-    }
-  }
-
-  if (provider === "gemini") {
-    try {
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models?key=${cleanKey}`
-      );
-      if (response.ok) {
-        return res.json({ valid: true, message: "Google Gemini API key is valid and connected!" });
-      }
-      const data: any = await response.json().catch(() => ({}));
-      return res.json({ valid: false, message: data?.error?.message || `Google returned HTTP ${response.status}` });
-    } catch (e: any) {
-      return res.json({ valid: false, message: e?.message || "Failed to contact Google Gemini API." });
-    }
-  }
-
-  if (provider === "emis") {
-    try {
-      const response = await fetch(`${EMIS_BASE_URL}/models`, {
-        headers: {
-          Authorization: `Bearer ${cleanKey}`,
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-        }
-      });
-      if (response.ok) {
-        return res.json({ valid: true, message: "Emis API key is valid and connected!" });
-      }
-      return res.json({ valid: false, message: `Emis returned HTTP ${response.status}` });
-    } catch (e: any) {
-      return res.json({ valid: false, message: e?.message || "Failed to contact Emis API." });
-    }
-  }
-
-  return res.status(400).json({ valid: false, message: `Unknown provider: ${provider}` });
-});
-
-// GET /api/ai/models - fetch available models by provider
-aiRouter.get("/ai/models", async (req: Request, res: Response) => {
-  const provider = ((req.query.provider as string) || "all").toLowerCase();
-  const userEmisKey = resolveEmisKey(req);
-  const groqKey = resolveGroqKey(req);
-  const geminiKey = resolveGeminiKey(req);
-
-  if (provider === "groq") {
-    const models = await getGroqModels(groqKey);
-    return res.json({
-      provider: "groq",
-      hasKey: Boolean(groqKey),
-      hasGeminiKey: Boolean(geminiKey),
-      models
-    });
-  }
-
-  if (provider === "emis") {
-    const models = await getEmisModels(userEmisKey);
-    return res.json({
-      provider: "emis",
-      hasKey: Boolean(userEmisKey),
-      emisExhausted,
-      emisExhaustedReason,
-      models
-    });
-  }
-
-  // Return full overview
-  const [groqModels, emisModels] = await Promise.all([
-    getGroqModels(groqKey),
-    getEmisModels(userEmisKey)
-  ]);
-
-  return res.json({
-    hasGroqKey: Boolean(groqKey),
-    hasEmisKey: Boolean(userEmisKey),
-    hasGeminiKey: Boolean(geminiKey),
-    emisExhausted,
-    emisExhaustedReason,
-    groq: groqModels,
-    emis: emisModels,
-    models: groqModels
-  });
-});
-
-interface GroqChatOptions {
-  model: string;
-  formattedMessages: any[];
+interface ChatOptions {
   stream: boolean;
   temperature?: number;
   max_tokens?: number;
-  isFailover?: boolean;
-  originalProvider?: string;
-  originalModel?: string;
-  failoverReason?: string;
 }
 
-async function handleGroqChat(req: Request, res: Response, options: GroqChatOptions) {
-  const { model, formattedMessages, stream, temperature, max_tokens, isFailover, originalProvider, originalModel, failoverReason } = options;
-  const groqKeys = resolveGroqKeys(req);
+interface ChatResult {
+  ok: boolean;
+  upstream: globalThis.Response | null; // set when ok
+  model: string;
+  error: string; // set when !ok
+  status: number; // HTTP status to use when !ok
+  allExhausted: boolean;
+}
 
-  if (groqKeys.length === 0) {
-    return res.status(400).json({
-      error: "AI service connection error. Please try again in a few moments."
-    });
+const chatOk = (upstream: globalThis.Response, model: string): ChatResult => ({
+  ok: true,
+  upstream,
+  model,
+  error: "",
+  status: 200,
+  allExhausted: false,
+});
+
+const chatFailed = (error: string, status: number, allExhausted: boolean): ChatResult => ({
+  ok: false,
+  upstream: null,
+  model: "",
+  error,
+  status,
+  allExhausted,
+});
+
+function chatBody(model: string, messages: any[], options: ChatOptions) {
+  return JSON.stringify({
+    model,
+    messages,
+    stream: options.stream,
+    ...(options.temperature !== undefined ? { temperature: Number(options.temperature) } : {}),
+    ...(options.max_tokens !== undefined ? { max_tokens: Number(options.max_tokens) } : {}),
+  });
+}
+
+/**
+ * Groq: try the requested model, then a known-good one, across every key we
+ * hold. Keys are free-tier accounts, so "this key is out of daily tokens" is
+ * normal and the next key usually just works.
+ */
+async function attemptGroq(model: string, messages: any[], options: ChatOptions): Promise<ChatResult> {
+  const keys = orderedGroqKeys();
+  if (keys.length === 0) {
+    return chatFailed("No Groq API key is configured on this server (set GROQ_API_KEYS).", 503, false);
   }
 
-  const availableGroqModels = await getGroqModels(groqKeys[0]);
-  const validModelIds = new Set(availableGroqModels.map(m => m.id));
+  const available = await fetchGroqModels();
+  const availableIds = available.map((m) => m.id);
+  const wanted = availableIds.includes(model) ? model : DEFAULT_GROQ_MODEL;
+  // A model can be retired upstream at any time, so keep a couple of spares.
+  const candidates = [wanted, DEFAULT_GROQ_MODEL, ...availableIds]
+    .filter((id, index, all) => all.indexOf(id) === index)
+    .slice(0, 5);
 
-  // Determine requested model or default (sanitize out non-Groq / Gemini models)
-  let requestedModel = model;
-  if (!requestedModel || !validModelIds.has(requestedModel) || requestedModel.toLowerCase().includes("gemini")) {
-    requestedModel = availableGroqModels[0]?.id || "openai/gpt-oss-120b";
+  let lastMessage = "";
+  let lastStatus = 502;
+
+  for (const candidate of candidates) {
+    let modelUnsupported = false;
+
+    for (const key of keys) {
+      try {
+        const response = await upstreamFetch(`${GROQ_BASE_URL}/chat/completions`, key, {
+          method: "POST",
+          body: chatBody(candidate, messages, options),
+        });
+
+        if (response.ok) {
+          const usedIndex = keys.indexOf(key);
+          if (usedIndex !== -1) nextGroqKeyIndex = usedIndex;
+          return chatOk(response, candidate);
+        }
+
+        const message = await readErrorMessage(response, `Groq HTTP ${response.status}`);
+        lastMessage = message;
+        lastStatus = response.status;
+        const lower = message.toLowerCase();
+
+        // Bad / exhausted key -> rest it and try the next key.
+        if (response.status === 401 || response.status === 402 || response.status === 429) {
+          coolDownKey(key);
+          continue;
+        }
+
+        // Model retired or overloaded -> try the next model.
+        if (response.status === 404 || response.status === 503 || lower.includes("does not exist") || lower.includes("not available")) {
+          modelUnsupported = true;
+          break;
+        }
+
+        // Anything else mentioning the model is also a model problem.
+        if (response.status === 400 && lower.includes("model")) {
+          modelUnsupported = true;
+          break;
+        }
+
+        // A real request error (bad messages, too long): no point retrying.
+        return chatFailed(message, 400, false);
+      } catch (err: any) {
+        lastMessage = err?.message || "Could not reach Groq";
+        lastStatus = 504;
+      }
+    }
+
+    if (modelUnsupported) continue;
   }
 
-  const priorityFallbackOrder = [
-    "openai/gpt-oss-120b",
-    "openai/gpt-oss-20b",
-    "qwen/qwen3.8-27b",
-    "allam-2-7b"
-  ];
+  return chatFailed(
+    lastMessage || "All Groq keys are rate limited right now. Try again in a minute.",
+    lastStatus === 429 ? 429 : 502,
+    true,
+  );
+}
 
-  const candidateModels: string[] = [
-    requestedModel,
-    ...priorityFallbackOrder.filter(id => id !== requestedModel && validModelIds.has(id)),
-    ...availableGroqModels.map(m => m.id).filter(id => id !== requestedModel && !priorityFallbackOrder.includes(id))
-  ];
+async function attemptEmis(model: string, messages: any[], options: ChatOptions): Promise<ChatResult> {
+  if (!hasEmis()) {
+    return chatFailed("No Emis API key is configured on this server (set EMIS_API_KEY).", 503, false);
+  }
 
   try {
-    let upstreamRes: any = null;
-    let successfulModel = requestedModel;
-    let wasFallbackSwitched = Boolean(isFailover);
-    let activeFallbackReason = failoverReason || "";
-    let lastErrorMessage = "";
-    const exhaustedKeysThisReq = new Set<string>();
+    const response = await upstreamFetch(`${EMIS_BASE_URL}/chat/completions`, emisKey(), {
+      method: "POST",
+      headers: { "User-Agent": BROWSER_USER_AGENT },
+      body: chatBody(model, messages, options),
+    });
 
-    for (const candidate of candidateModels) {
-      for (const activeKey of groqKeys) {
-        if (exhaustedKeysThisReq.has(activeKey)) {
-          continue;
-        }
-
-        try {
-          const fetchRes = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${activeKey}`
-            },
-            body: JSON.stringify({
-              model: candidate,
-              messages: formattedMessages,
-              stream: !!stream,
-              ...(temperature !== undefined ? { temperature: Number(temperature) } : {}),
-              ...(max_tokens !== undefined ? { max_tokens: Number(max_tokens) } : {})
-            })
-          });
-
-          if (fetchRes.ok) {
-            upstreamRes = fetchRes;
-            successfulModel = candidate;
-            const keyIndex = groqKeys.indexOf(activeKey);
-            if (keyIndex !== -1) {
-              activeGroqKeyIndex = keyIndex;
-            }
-            if (candidate !== requestedModel) {
-              wasFallbackSwitched = true;
-            }
-            break;
-          }
-
-          const errorText = await fetchRes.text();
-          let errorJson: any = null;
-          try {
-            errorJson = JSON.parse(errorText);
-          } catch (e) {}
-
-          const errMsg = errorJson?.error?.message || errorJson?.message || `HTTP ${fetchRes.status}: ${fetchRes.statusText}`;
-          lastErrorMessage = errMsg;
-
-          const isQuotaOrDailyLimit =
-            fetchRes.status === 401 ||
-            fetchRes.status === 402 ||
-            errMsg.toLowerCase().includes("requests per day") ||
-            errMsg.toLowerCase().includes("rpd") ||
-            errMsg.toLowerCase().includes("daily limit") ||
-            errMsg.toLowerCase().includes("insufficient_quota") ||
-            errMsg.toLowerCase().includes("exceeded your current quota") ||
-            errMsg.toLowerCase().includes("billing");
-
-          const isRateLimit =
-            fetchRes.status === 429 ||
-            errMsg.toLowerCase().includes("rate limit") ||
-            errMsg.toLowerCase().includes("tpm") ||
-            errMsg.toLowerCase().includes("rpm") ||
-            errMsg.toLowerCase().includes("tpd") ||
-            errMsg.toLowerCase().includes("tokens per") ||
-            errMsg.toLowerCase().includes("too many requests");
-
-          if (isQuotaOrDailyLimit) {
-            console.warn(`[Groq Key Pool] Key ...${activeKey.slice(-6)} quota or daily limit reached (${errMsg}). Switching to next key in pool...`);
-            exhaustedKeysThisReq.add(activeKey);
-            markGroqKeyCooldown(activeKey, 30 * 60 * 1000);
-            advanceGroqKey();
-            activeFallbackReason = `Key limit reached (${errMsg})`;
-            continue; // Switch to another key immediately
-          }
-
-          if (isRateLimit) {
-            console.warn(`[Groq Key Pool] Key ...${activeKey.slice(-6)} rate limited (${errMsg}). Switching to next key in pool...`);
-            exhaustedKeysThisReq.add(activeKey);
-            markGroqKeyCooldown(activeKey, 60 * 1000);
-            advanceGroqKey();
-            activeFallbackReason = `Key rate limited (${errMsg})`;
-            continue; // Switch to another key immediately
-          }
-
-          const isModelUnavailable =
-            fetchRes.status === 404 ||
-            fetchRes.status === 503 ||
-            errMsg.toLowerCase().includes("does not exist") ||
-            errMsg.toLowerCase().includes("do not have access") ||
-            errMsg.toLowerCase().includes("overloaded") ||
-            errMsg.toLowerCase().includes("capacity") ||
-            errMsg.toLowerCase().includes("classification");
-
-          if (isModelUnavailable) {
-            console.warn(`[Groq Failover] Model ${candidate} unavailable on Groq (${errMsg}). Trying next candidate model...`);
-            activeFallbackReason = errMsg;
-            break; // Skip other keys for this unsupported model, move to next model
-          } else {
-            // Client error
-            if (fetchRes.status === 400 && !errMsg.toLowerCase().includes("model")) {
-              return res.status(fetchRes.status).json({ error: errMsg });
-            }
-            continue;
-          }
-        } catch (callErr: any) {
-          lastErrorMessage = callErr?.message || "Network error reaching Groq API";
-          continue;
-        }
-      }
-
-      if (upstreamRes) {
-        break;
-      }
+    if (response.ok) {
+      emisCooldownUntil = 0;
+      emisLastError = "";
+      return chatOk(response, model);
     }
 
-    if (!upstreamRes) {
-      return res.status(429).json({
-        error: `All available Groq models have temporarily reached their rate limits (${lastErrorMessage}). Please try again in a moment.`,
-        allExhausted: true
-      });
-    }
-
-    res.setHeader("Access-Control-Expose-Headers", "x-switched-provider, x-switched-model, x-original-provider, x-original-model, x-fallback-reason");
-    if (isFailover && originalProvider && originalProvider !== "groq") {
-      res.setHeader("x-switched-provider", "groq");
-      res.setHeader("x-original-provider", originalProvider);
-      res.setHeader("x-original-model", originalModel || "");
-    }
-    if (wasFallbackSwitched && successfulModel !== requestedModel) {
-      res.setHeader("x-switched-model", successfulModel);
-      res.setHeader("x-original-model", requestedModel);
-      res.setHeader("x-fallback-reason", activeFallbackReason);
-    }
-
-    if (stream && upstreamRes.body) {
-      res.setHeader("Content-Type", "text/event-stream");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-
-      const reader = upstreamRes.body.getReader();
-      const decoder = new TextDecoder();
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          res.write(chunk);
-        }
-      } catch (streamErr) {
-        console.error("Groq stream reading error:", streamErr);
-      } finally {
-        res.end();
-      }
-    } else {
-      const data = await upstreamRes.json();
-      if (wasFallbackSwitched) {
-        data.switchedModel = successfulModel;
-        data.originalModel = requestedModel;
-        data.fallbackReason = activeFallbackReason;
-      }
-      if (isFailover) {
-        data.switchedProvider = "groq";
-        data.originalProvider = originalProvider || "emis";
-      }
-      return res.json(data);
-    }
+    const message = await readErrorMessage(response, `Emis HTTP ${response.status}`);
+    coolDownEmis(message);
+    return chatFailed(message, response.status === 429 ? 429 : 502, true);
   } catch (err: any) {
-    console.error("Groq chat completion error:", err);
-    return res.status(500).json({ error: err?.message || "Internal error communicating with Groq API." });
+    const message = err?.message || "Could not reach Emis";
+    coolDownEmis(message);
+    return chatFailed(message, 504, true);
   }
 }
 
-// POST /api/ai/chat - proxy chat completions for Groq or Emis
-aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
-  const requestedProvider = ((req.body.provider as string) || "").toLowerCase();
-  const { model, messages, stream = true, temperature, max_tokens, systemPrompt } = req.body;
+/** Copy the upstream SSE stream to the browser chunk by chunk. */
+async function pipeStream(upstream: globalThis.Response, res: Response): Promise<void> {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
 
-  if (!messages || !Array.isArray(messages) || messages.length === 0) {
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+
+  const reader = upstream.body.getReader();
+  const decoder = new TextDecoder();
+
+  // If the user hits Stop, the browser drops the response. Cancel the
+  // upstream read too so we stop paying for tokens nobody will see.
+  res.on("close", () => {
+    reader.cancel().catch(() => {});
+  });
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      res.write(decoder.decode(value, { stream: true }));
+    }
+  } catch (err: any) {
+    if (err?.name !== "AbortError") console.error("[ai] stream error:", err?.message || err);
+  } finally {
+    res.end();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 5. Routes
+ * ------------------------------------------------------------------ */
+
+/** GET /api/ai/models — model pickers for both providers. */
+aiRouter.get("/ai/models", async (req: Request, res: Response) => {
+  const provider = String(req.query.provider || "all").toLowerCase();
+
+  const [groq, emis] = await Promise.all([
+    provider === "emis" ? Promise.resolve<ModelInfo[]>([]) : fetchGroqModels(),
+    provider === "groq" ? Promise.resolve<ModelInfo[]>([]) : fetchEmisModels(),
+  ]);
+
+  const emisUp = emisAvailable();
+  return res.json({
+    groq,
+    emis,
+    groqConfigured: hasGroq(),
+    emisConfigured: hasEmis(),
+    emisExhausted: !emisUp,
+    emisExhaustedReason: emisUp ? "" : hasEmis() ? emisLastError : "No EMIS_API_KEY configured on the server.",
+  });
+});
+
+/**
+ * POST /api/ai/chat
+ * Body: { provider: "emis" | "groq", model, messages, stream?, systemPrompt? }
+ * Streams the answer back (or returns JSON when stream:false).
+ */
+aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
+  const body = req.body || {};
+  const { messages, systemPrompt } = body;
+  const requestedModel = typeof body.model === "string" ? body.model : "";
+  const requestedProvider = String(body.provider || "").toLowerCase();
+
+  if (!Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: "Missing or invalid 'messages' array." });
   }
 
-  // Identify whether request should go to Groq or Emis
-  const isGroqModel = GROQ_FALLBACK_MODELS.some(m => m.id === model) || 
-    (model && (
-      model.startsWith("groq/") || 
-      model.startsWith("openai/gpt-oss") || 
-      model.startsWith("qwen/") || 
-      model.startsWith("allam-") || 
-      model.startsWith("llama-") || 
-      model.startsWith("deepseek-r1-distill") || 
-      model.startsWith("gemma2-") || 
-      model.startsWith("mixtral-")
-    ));
+  const conversation = [...messages];
+  if (systemPrompt && conversation[0]?.role !== "system") {
+    conversation.unshift({ role: "system", content: systemPrompt });
+  }
 
-  const provider = requestedProvider === "groq" || (requestedProvider !== "emis" && isGroqModel) ? "groq" : "emis";
+  const options: ChatOptions = {
+    stream: body.stream !== false,
+    temperature: body.temperature,
+    max_tokens: body.max_tokens,
+  };
 
-  const formattedMessages = [...messages];
-  if (systemPrompt && (!formattedMessages[0] || formattedMessages[0].role !== "system")) {
-    formattedMessages.unshift({
-      role: "system",
-      content: systemPrompt
+  // Explicit provider wins; otherwise infer it from the model id.
+  const looksLikeGroq = /^(openai\/gpt-oss|qwen|allam-|llama-?[0-9]|llama-3|deepseek-r1|gemma|mixtral|mistral)/i.test(requestedModel);
+  let provider: "groq" | "emis" = requestedProvider === "groq" ? "groq" : requestedProvider === "emis" ? "emis" : looksLikeGroq ? "groq" : "emis";
+
+  // If the chosen provider has no key while the other one does, start there.
+  if (provider === "emis" && !emisAvailable() && hasGroq()) provider = "groq";
+  else if (provider === "groq" && !hasGroq() && hasEmis()) provider = "emis";
+
+  const run = (target: "groq" | "emis"): Promise<ChatResult> =>
+    target === "groq"
+      ? attemptGroq(requestedModel || DEFAULT_GROQ_MODEL, conversation, options)
+      : attemptEmis(requestedModel || DEFAULT_EMIS_MODEL, conversation, options);
+
+  // One retry on the other provider. That is the whole failover story.
+  const firstProvider = provider;
+  const first = await run(firstProvider);
+  const fallback: "groq" | "emis" = firstProvider === "emis" ? "groq" : "emis";
+  const canFallBack = !first.ok && (fallback === "groq" ? hasGroq() : emisAvailable());
+  const second = canFallBack ? await run(fallback) : null;
+
+  const switchedFrom = second && second.ok ? firstProvider : null;
+  const usedProvider: "groq" | "emis" = switchedFrom ? fallback : firstProvider;
+  const answer = second && second.ok ? second : first;
+
+  if (!answer.ok) {
+    const status = answer.status === 429 ? 429 : answer.status >= 500 ? answer.status : 502;
+    return res.status(status).json({
+      error: answer.error,
+      ...(firstProvider === "emis" || usedProvider === "emis" ? { emisExhausted: true } : { allExhausted: true }),
     });
   }
 
-  if (provider === "groq") {
-    return handleGroqChat(req, res, {
-      model,
-      formattedMessages,
-      stream: !!stream,
-      temperature,
-      max_tokens
-    });
-  } else {
-    // Emis Provider with resilient automatic failover to Groq
-    const userEmisKey = resolveEmisKey(req);
-    const selectedModel = (!model || model === "glm-5.3") ? "claude-fable-5-1" : model;
-    const isGrokModel = Boolean(model && typeof model === "string" && model.toLowerCase().includes("grok"));
-
-    // If Emis is already marked exhausted and user wants a Grok model or Emis model, jump straight to Groq
-    if (emisExhausted) {
-      console.warn(`[AI Server] Emis is exhausted. Seamlessly routing ${selectedModel} directly to Groq keys pool...`);
-      return handleGroqChat(req, res, {
-        model: "openai/gpt-oss-120b",
-        formattedMessages,
-        stream: !!stream,
-        temperature,
-        max_tokens,
-        isFailover: true,
-        originalProvider: "emis",
-        originalModel: selectedModel,
-        failoverReason: isGrokModel
-          ? "Grok models are currently unavailable. Automatically switched to high-speed Groq AI."
-          : (emisExhaustedReason || "Emis capacity reached. Automatically switched to high-speed Groq AI.")
-      });
-    }
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000); // 6s timeout to avoid hanging if upstream stalls
-
-      const upstreamRes = await fetch(`${EMIS_BASE_URL}/chat/completions`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${userEmisKey}`,
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: formattedMessages,
-          stream: !!stream,
-          ...(temperature !== undefined ? { temperature: Number(temperature) } : {}),
-          ...(max_tokens !== undefined ? { max_tokens: Number(max_tokens) } : {})
-        })
-      });
-
-      clearTimeout(timeoutId);
-
-      if (!upstreamRes.ok) {
-        const errorText = await upstreamRes.text();
-        let errorJson: any = null;
-        try {
-          errorJson = JSON.parse(errorText);
-        } catch (e) {}
-
-        const errMsg = errorJson?.error?.message || errorJson?.message || `Emis API returned HTTP ${upstreamRes.status} (${upstreamRes.statusText})`;
-        
-        emisExhausted = true;
-        emisExhaustedReason = errMsg;
-        console.warn(`[AI Server] Emis returned error (${errMsg}). Automatically failing over to Groq LPU keys pool...`);
-
-        // Transparently failover to Groq so chat NEVER fails on any PC!
-        return handleGroqChat(req, res, {
-          model: "openai/gpt-oss-120b",
-          formattedMessages,
-          stream: !!stream,
-          temperature,
-          max_tokens,
-          isFailover: true,
-          originalProvider: "emis",
-          originalModel: selectedModel,
-          failoverReason: isGrokModel
-            ? `Grok model unavailable (${errMsg}). Switched to Groq high-speed AI.`
-            : errMsg
-        });
-      }
-
-      if (stream && upstreamRes.body) {
-        res.setHeader("Content-Type", "text/event-stream");
-        res.setHeader("Cache-Control", "no-cache, no-transform");
-        res.setHeader("Connection", "keep-alive");
-        res.setHeader("X-Accel-Buffering", "no");
-
-        const reader = upstreamRes.body.getReader();
-        const decoder = new TextDecoder();
-
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            const chunk = decoder.decode(value, { stream: true });
-            res.write(chunk);
-          }
-        } catch (streamErr) {
-          console.error("Emis stream reading error:", streamErr);
-        } finally {
-          res.end();
-        }
-      } else {
-        const data = await upstreamRes.json();
-        return res.json(data);
-      }
-    } catch (err: any) {
-      console.warn(`[AI Server] Emis fetch failed (${err?.message || err}). Automatically failing over to Groq LPU keys pool...`);
-      emisExhausted = true;
-      emisExhaustedReason = err?.message || "Emis connection failed";
-
-      // Transparently failover to Groq so chat NEVER fails on any PC!
-      return handleGroqChat(req, res, {
-        model: "openai/gpt-oss-120b",
-        formattedMessages,
-        stream: !!stream,
-        temperature,
-        max_tokens,
-        isFailover: true,
-        originalProvider: "emis",
-        originalModel: selectedModel,
-        failoverReason: isGrokModel
-          ? "Grok models are currently unavailable. Switched to Groq high-speed AI."
-          : (err?.message || "Emis connection failed")
-      });
-    }
+  if (switchedFrom) {
+    console.warn(`[ai] ${firstProvider} unavailable (${first.error}); answered with ${fallback} instead.`);
   }
+
+  // Tell the UI when it is not getting exactly what it asked for, so it can
+  // update the model label instead of silently showing the wrong one.
+  res.setHeader("Access-Control-Expose-Headers", "x-switched-provider, x-switched-model, x-original-provider, x-original-model, x-fallback-reason");
+  if (switchedFrom) {
+    res.setHeader("x-switched-provider", usedProvider);
+    res.setHeader("x-original-provider", switchedFrom);
+    res.setHeader("x-fallback-reason", "Primary provider unavailable; answered by the backup.");
+  }
+  if (answer.model !== requestedModel && requestedModel) {
+    res.setHeader("x-switched-model", answer.model);
+    res.setHeader("x-original-model", requestedModel);
+  }
+
+  if (options.stream && answer.upstream) {
+    await pipeStream(answer.upstream, res);
+    return;
+  }
+
+  const data: any = await answer.upstream.json().catch(() => ({}));
+  data.provider = usedProvider;
+  data.model = answer.model;
+  return res.json(data);
+});
+
+/**
+ * GET /api/ai/health — "are my Cloud Run keys actually working?"
+ * Booleans only: it never returns a key or part of one.
+ */
+aiRouter.get("/ai/health", (_req: Request, res: Response) => {
+  const keys = groqKeys();
+  const emisUp = emisAvailable();
+  return res.json({
+    ok: hasGroq() || hasEmis(),
+    providers: {
+      emis: {
+        configured: hasEmis(),
+        available: emisUp,
+        lastError: emisLastError || null,
+      },
+      groq: {
+        configured: keys.length > 0,
+        keyCount: keys.length,
+        keysResting: keys.filter(isCoolingDown).length,
+      },
+    },
+    defaults: { groq: DEFAULT_GROQ_MODEL, emis: DEFAULT_EMIS_MODEL },
+  });
 });
 
 export default aiRouter;
-

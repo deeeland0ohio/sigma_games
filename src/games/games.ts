@@ -15,14 +15,14 @@ export const games: Game[] = [
   {
     id: 'ai-chat',
     title: 'AI Chat',
-    description: 'Chat with AI models (Claude, Glm, Gpt & more)!',
+    description: "Chat with ai models! (Provider isn't good rn sorry, switching to a better one soon.)",
     icon: Bot,
     type: 'folder',
   },
   {
     id: 'music',
     title: 'Music',
-    description: 'Browse, search & play music with Meting API!',
+    description: "Browse, search & play music with x8rr's Music Api!",
     icon: Music,
     type: 'folder',
   },

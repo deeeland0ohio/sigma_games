@@ -250,6 +250,19 @@ const streamProxyHandler = async (req: Request, res: Response) => {
 
     const { Readable } = await import("node:stream");
     const nodeStream = Readable.fromWeb(upstream.body as any);
+
+    // A listener that seeks, skips or closes the tab tears the response down
+    // mid-pipe. Without these handlers that surfaces as an uncaught 'error'
+    // event and takes the whole server with it.
+    nodeStream.on("error", () => {
+      abortCtrl.abort();
+      if (!res.writableEnded) res.end();
+    });
+    res.on("close", () => {
+      abortCtrl.abort();
+      nodeStream.destroy();
+    });
+
     nodeStream.pipe(res);
   } catch (e: any) {
     if (!res.headersSent) {
