@@ -8,7 +8,7 @@ import { RESOLVE_BUDGET_MS, searchSaavn } from "./fullLength";
 import { buildQueries, identityMismatch } from "./match";
 import { searchYouTubeRaw } from "./youtubeStream";
 import { searchSoundCloudTracks } from "./soundcloudApi";
-import { isYtDlpAvailable, resolveWithYtDlp, ytDlpBinaryPath } from "./ytdlp";
+import { isYtDlpAvailable, resolveWithYtDlp, ytDlpBinaryPath, ytDlpConfig } from "./ytdlp";
 
 const musicRouter = express.Router();
 
@@ -316,7 +316,7 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
     target: identity,
     query,
     budgetMs: RESOLVE_BUDGET_MS,
-    ytDlp: { available: isYtDlpAvailable(), path: ytDlpBinaryPath() },
+    ytDlp: { available: isYtDlpAvailable(), path: ytDlpBinaryPath(), configured: ytDlpConfig() },
     ytDlpProbe,
     backends,
     totalMs: Date.now() - startedAt,
