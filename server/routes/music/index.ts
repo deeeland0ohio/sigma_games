@@ -8,7 +8,7 @@ import { RESOLVE_BUDGET_MS, searchSaavn } from "./fullLength";
 import { buildQueries, identityMismatch } from "./match";
 import { searchYouTubeRaw } from "./youtubeStream";
 import { searchSoundCloudTracks } from "./soundcloudApi";
-import { isYtDlpAvailable, resolveWithYtDlp, ytDlpBinaryPath, ytDlpConfig } from "./ytdlp";
+import { isYtDlpAvailable, probeYtDlp, ytDlpBinaryPath, ytDlpConfig } from "./ytdlp";
 
 const musicRouter = express.Router();
 
@@ -258,57 +258,69 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
   const query = buildQueries(identity)[0] || name;
   const perBackendBudget = 8000;
   const startedAt = Date.now();
-  const backends: any[] = [];
 
   const probe = async (
     backend: string,
-    search: (deadline: number) => Promise<{ title: string; artist: string; duration: number }[]>
-  ) => {
+    search: (deadline: number) => Promise<{ title: string; artist: string; duration: number; videoId?: string }[]>
+  ): Promise<any> => {
     const started = Date.now();
     try {
       const items = await search(Date.now() + perBackendBudget);
-      backends.push({
+      return {
         backend,
         elapsedMs: Date.now() - started,
         candidates: items.slice(0, 5).map((item) => {
           const rejectedBecause = identityMismatch(item, identity);
           return { ...item, accepted: rejectedBecause.length === 0, rejectedBecause };
         }),
-      });
+      };
     } catch (err: any) {
-      backends.push({
+      return {
         backend,
         elapsedMs: Date.now() - started,
         error: err?.message || String(err),
-      });
+      };
     }
   };
 
-  await probe("saavn", (deadline) => searchSaavn(query, deadline));
-  await probe("youtube", async (deadline) =>
-    (await searchYouTubeRaw(`${query} official audio`, 10, deadline)).map((item) => ({
-      title: item.title,
-      artist: item.author,
-      duration: item.duration,
-    }))
-  );
-  await probe("soundcloud", async () =>
-    (await searchSoundCloudTracks(query, 12)).map((item) => ({
-      title: item.title,
-      artist: item.artist,
-      duration: item.duration,
-    }))
-  );
+  // The catalogs are independent, so they are searched at the same time; one
+  // after another this route alone would spend 8s per backend.
+  const [saavn, youtube, soundcloud] = await Promise.all([
+    probe("saavn", (deadline) => searchSaavn(query, deadline)),
+    probe("youtube", async (deadline) =>
+      (await searchYouTubeRaw(`${query} official audio`, 10, deadline)).map((item) => ({
+        title: item.title,
+        artist: item.author,
+        duration: item.duration,
+        videoId: item.videoId,
+      }))
+    ),
+    probe("soundcloud", async () =>
+      (await searchSoundCloudTracks(query, 12)).map((item) => ({
+        title: item.title,
+        artist: item.artist,
+        duration: item.duration,
+      }))
+    ),
+  ]);
 
-  let ytDlpProbe: any = null;
-  if (videoId) {
-    const started = Date.now();
-    const stream = await resolveWithYtDlp(videoId, Date.now() + 15000);
+  // With no videoId supplied, test the best verified YouTube copy, so one
+  // request answers "can this host extract audio at all?" without the caller
+  // having to dig an 11-character id out of the search results first.
+  const autoVideoId: string | undefined = Array.isArray(youtube?.candidates)
+    ? youtube.candidates.find((candidate: any) => candidate.accepted && candidate.videoId)?.videoId
+    : undefined;
+  const probeVideoId = videoId || autoVideoId;
+
+  let ytDlpProbe: any;
+  if (probeVideoId) {
+    const result = await probeYtDlp(probeVideoId, Date.now() + 15000);
+    ytDlpProbe = { videoId: probeVideoId, autoSelected: !videoId, ...result };
+  } else {
     ytDlpProbe = {
-      videoId,
-      ok: Boolean(stream?.url),
-      elapsedMs: Date.now() - started,
-      stream: stream?.url ? (stream.url.includes(".m3u8") ? "hls" : "progressive") : null,
+      hint:
+        "no verified YouTube copy to test: pass &videoId=<11 chars>. If extraction " +
+        "fails, set YT_DLP_PROXY / YT_DLP_PROXY_FILE to extract from an IP YouTube allows.",
     };
   }
 
@@ -318,7 +330,7 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
     budgetMs: RESOLVE_BUDGET_MS,
     ytDlp: { available: isYtDlpAvailable(), path: ytDlpBinaryPath(), configured: ytDlpConfig() },
     ytDlpProbe,
-    backends,
+    backends: [saavn, youtube, soundcloud],
     totalMs: Date.now() - startedAt,
   });
 });
