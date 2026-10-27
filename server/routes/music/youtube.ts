@@ -83,12 +83,12 @@ export async function resolveYouTubeTrack(track: {
   name?: string;
   artist?: string;
   duration?: number;
-}): Promise<StreamResolutionResult | null> {
+}, deadline?: number): Promise<StreamResolutionResult | null> {
   const videoId = String(track.id || track.rawId || "").replace(/^yt_/, "");
 
   // 1. The exact video the user clicked.
   if (/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
-    const stream = await resolveYouTubeAudioStream(videoId);
+    const stream = await resolveYouTubeAudioStream(videoId, deadline);
     if (stream?.url) {
       return {
         url: stream.url,
@@ -101,5 +101,8 @@ export async function resolveYouTubeTrack(track: {
   }
 
   // 2. The same recording, verified, from another backend.
-  return resolveFullLengthAudio({ title: track.name, artist: track.artist, duration: track.duration });
+  return resolveFullLengthAudio(
+    { title: track.name, artist: track.artist, duration: track.duration },
+    deadline
+  );
 }

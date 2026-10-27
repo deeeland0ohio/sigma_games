@@ -137,23 +137,33 @@ export function durationMatches(targetDuration?: number, candidateDuration?: num
 }
 
 /**
- * The one gate every audio candidate has to pass.
+ * The one gate every audio candidate has to pass, plus the reason it failed.
+ *
+ * Returning the reasons (instead of a bare boolean) is what makes
+ * `/api/music/debug` able to say "rejected: artist, duration" for a candidate
+ * instead of leaving us guessing why a track fell back to a preview.
  */
-export function isSameRecording(candidate: Candidate, target: TrackIdentity): boolean {
-  if (!candidate.title || !target.title) return false;
-  if (titleScore(candidate.title, target.title) < 0.85) return false;
-  if (!artistMatches(target.artist, candidate.artist || "", candidate.title)) return false;
-  if (!durationMatches(target.duration, candidate.duration)) return false;
+export function identityMismatch(candidate: Candidate, target: TrackIdentity): string[] {
+  if (!candidate.title || !target.title) return ["title-missing"];
+
+  const reasons: string[] = [];
+  if (titleScore(candidate.title, target.title) < 0.85) reasons.push("title");
+  if (!artistMatches(target.artist, candidate.artist || "", candidate.title)) reasons.push("artist");
+  if (!durationMatches(target.duration, candidate.duration)) reasons.push("duration");
 
   // An altered recording is only acceptable when the user asked for it,
   // e.g. a track literally titled "... (Remix)".
-  const allowed = new Set(alterationMarkers(target.title));
-  const extra = alterationMarkers(candidate.title).filter((m) => !allowed.has(m));
-  if (extra.length > 0) return false;
-
   // A candidate cannot be shorter than the song by more than the tolerance;
   // that is how 30-second previews used to slip in as "full" tracks.
-  return true;
+  const allowed = new Set(alterationMarkers(target.title));
+  const extra = alterationMarkers(candidate.title).filter((m) => !allowed.has(m));
+  if (extra.length > 0) reasons.push(`altered:${extra.join(",")}`);
+
+  return reasons;
+}
+
+export function isSameRecording(candidate: Candidate, target: TrackIdentity): boolean {
+  return identityMismatch(candidate, target).length === 0;
 }
 
 /** Search terms for finding a track on another catalog, best first. */

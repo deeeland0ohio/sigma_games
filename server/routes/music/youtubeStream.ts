@@ -32,11 +32,39 @@ export interface YouTubeStream {
   duration?: number;
 }
 
-export async function resolveYouTubeAudioStream(videoId: string): Promise<YouTubeStream | null> {
+/** `yts` has no timeout of its own, and a hung search would stall the request. */
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        clearTimeout(timer);
+        resolve(null);
+      }
+    );
+  });
+}
+
+/** How long a single step may take, never past the caller's deadline. */
+function stepTimeout(deadline: number | undefined, capMs: number): number {
+  if (!deadline) return capMs;
+  return Math.max(0, Math.min(capMs, deadline - Date.now()));
+}
+
+export async function resolveYouTubeAudioStream(
+  videoId: string,
+  deadline?: number
+): Promise<YouTubeStream | null> {
   const id = String(videoId || "").replace(/^yt_/, "").trim();
   if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
 
   for (const client of CLIENTS) {
+    const timeout = stepTimeout(deadline, 8000);
+    if (timeout < 1500) break;
     try {
       const response = await fetch(INNERTUBE_PLAYER_URL, {
         method: "POST",
@@ -53,7 +81,7 @@ export async function resolveYouTubeAudioStream(videoId: string): Promise<YouTub
           contentCheckOk: true,
           racyCheckOk: true,
         }),
-        signal: AbortSignal.timeout(8000),
+        signal: AbortSignal.timeout(timeout),
       });
 
       if (!response.ok) continue;
@@ -81,7 +109,7 @@ export async function resolveYouTubeAudioStream(videoId: string): Promise<YouTub
   }
 
   // InnerTube is refused from most datacenter IPs; yt-dlp copes far better.
-  const viaYtDlp = await resolveWithYtDlp(id);
+  const viaYtDlp = await resolveWithYtDlp(id, deadline);
   if (viaYtDlp?.url) {
     return {
       url: viaYtDlp.url,
@@ -103,9 +131,19 @@ export interface YouTubeSearchItem {
 }
 
 /** Raw YouTube search (no metadata rewriting). */
-export async function searchYouTubeRaw(query: string, limit = 12): Promise<YouTubeSearchItem[]> {
+export async function searchYouTubeRaw(
+  query: string,
+  limit = 12,
+  deadline?: number
+): Promise<YouTubeSearchItem[]> {
   try {
-    const results = await yts(query);
+    const budget = stepTimeout(deadline, 6000);
+    if (budget < 1000) return [];
+    const results = await withTimeout<{ videos?: any[] }>(
+      yts(query) as Promise<{ videos?: any[] }>,
+      budget
+    );
+    if (!results) return [];
     return (results.videos || []).slice(0, limit).map((video) => ({
       videoId: video.videoId,
       title: video.title,

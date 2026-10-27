@@ -4,6 +4,11 @@ import { searchDeezer, resolveDeezerTrack } from "./deezer";
 import { searchOctave, resolveOctaveTrack } from "./octave";
 import { searchYouTube, resolveYouTubeTrack } from "./youtube";
 import { searchSoundCloud, resolveSoundCloudTrack } from "./soundcloud";
+import { RESOLVE_BUDGET_MS, searchSaavn } from "./fullLength";
+import { buildQueries, identityMismatch } from "./match";
+import { searchYouTubeRaw } from "./youtubeStream";
+import { searchSoundCloudTracks } from "./soundcloudApi";
+import { isYtDlpAvailable, resolveWithYtDlp, ytDlpBinaryPath } from "./ytdlp";
 
 const musicRouter = express.Router();
 
@@ -140,21 +145,41 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
     return res.json(cached);
   }
 
+  // One deadline for the whole lookup. A resolver that runs for minutes gets
+  // the request killed by the host (Cloud Run answers 503), so the budget is
+  // spent trying, not waiting: when it expires the preview is served instead.
+  const deadline = Date.now() + RESOLVE_BUDGET_MS;
+
   try {
-    let resolved: StreamResolutionResult | null = null;
     const trackPayload = { id, name, artist, duration, previewUrl };
 
-    if (source === "deezer" || id.startsWith("dz_")) {
-      resolved = await resolveDeezerTrack(trackPayload);
-    } else if (source === "octave" || id.startsWith("octave_")) {
-      resolved = await resolveOctaveTrack(trackPayload);
-    } else if (source === "youtube" || id.startsWith("yt_") || (id.length === 11 && !id.includes("_"))) {
-      resolved = await resolveYouTubeTrack(trackPayload);
-    } else if (source === "soundcloud" || id.startsWith("sc_")) {
-      resolved = await resolveSoundCloudTrack(trackPayload);
-    } else {
-      resolved = await resolveDeezerTrack(trackPayload);
-    }
+    const resolution = (async (): Promise<StreamResolutionResult | null> => {
+      if (source === "deezer" || id.startsWith("dz_")) {
+        return resolveDeezerTrack(trackPayload, deadline);
+      }
+      if (source === "octave" || id.startsWith("octave_")) {
+        return resolveOctaveTrack(trackPayload, deadline);
+      }
+      if (source === "youtube" || id.startsWith("yt_") || (id.length === 11 && !id.includes("_"))) {
+        return resolveYouTubeTrack(trackPayload, deadline);
+      }
+      if (source === "soundcloud" || id.startsWith("sc_")) {
+        return resolveSoundCloudTrack(trackPayload, deadline);
+      }
+      return resolveDeezerTrack(trackPayload, deadline);
+    })().catch((err) => {
+      console.warn("[music] resolve failed:", err?.message || err);
+      return null;
+    });
+
+    // Hard guard: even a resolver that ignores its deadline cannot hold the
+    // connection open past the budget.
+    let guardTimer: ReturnType<typeof setTimeout> | undefined;
+    const guard = new Promise<null>((resolve) => {
+      guardTimer = setTimeout(() => resolve(null), RESOLVE_BUDGET_MS + 3000);
+    });
+    const resolved = await Promise.race([resolution, guard]);
+    if (guardTimer) clearTimeout(guardTimer);
 
     if (resolved?.url) {
       const result = {
@@ -165,7 +190,10 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
         duration: resolved.duration || duration,
         streamUrl: `/api/music/stream?url=${encodeURIComponent(resolved.url)}`
       };
-      setCache(cacheKey, result);
+      // A preview is a negative result: remember it briefly so the next click
+      // answers instantly instead of paying the budget again, but not so long
+      // that a fixed source stays broken for the rest of the session.
+      setCache(cacheKey, result, resolved.isFullLength ? undefined : 5 * 60 * 1000);
       return res.json(result);
     }
 
@@ -199,6 +227,100 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
     }
     return res.status(500).json({ error: "Resolution error", details: err?.message });
   }
+});
+
+/**
+ * Diagnostics: why did this track resolve the way it did?
+ *
+ * "It plays 30 seconds on the deployed site but not here" is otherwise a
+ * guessing game, because the answer depends on the host's IP, on whether
+ * yt-dlp is installed, and on which catalog has a verified copy. One request
+ * reports all three: yt-dlp presence, what each backend found, and which gate
+ * rejected each candidate.
+ *
+ *   /api/music/debug?name=SPIN&artist=KROI&duration=305
+ *   /api/music/debug?name=SPIN&artist=KROI&duration=305&videoId=<11 chars>
+ */
+musicRouter.get("/debug", async (req: Request, res: Response) => {
+  const name = ((req.query.name || req.query.title || "") as string).trim();
+  const artist = ((req.query.artist || "") as string).trim();
+  const duration = Number(req.query.duration) || 0;
+  const videoId = ((req.query.videoId || req.query.yt || "") as string).trim();
+
+  if (!name) {
+    return res.status(400).json({
+      error: "name is required",
+      example: "/api/music/debug?name=SPIN&artist=KROI&duration=305",
+    });
+  }
+
+  const identity = { title: name, artist, duration };
+  const query = buildQueries(identity)[0] || name;
+  const perBackendBudget = 8000;
+  const startedAt = Date.now();
+  const backends: any[] = [];
+
+  const probe = async (
+    backend: string,
+    search: (deadline: number) => Promise<{ title: string; artist: string; duration: number }[]>
+  ) => {
+    const started = Date.now();
+    try {
+      const items = await search(Date.now() + perBackendBudget);
+      backends.push({
+        backend,
+        elapsedMs: Date.now() - started,
+        candidates: items.slice(0, 5).map((item) => {
+          const rejectedBecause = identityMismatch(item, identity);
+          return { ...item, accepted: rejectedBecause.length === 0, rejectedBecause };
+        }),
+      });
+    } catch (err: any) {
+      backends.push({
+        backend,
+        elapsedMs: Date.now() - started,
+        error: err?.message || String(err),
+      });
+    }
+  };
+
+  await probe("saavn", (deadline) => searchSaavn(query, deadline));
+  await probe("youtube", async (deadline) =>
+    (await searchYouTubeRaw(`${query} official audio`, 10, deadline)).map((item) => ({
+      title: item.title,
+      artist: item.author,
+      duration: item.duration,
+    }))
+  );
+  await probe("soundcloud", async () =>
+    (await searchSoundCloudTracks(query, 12)).map((item) => ({
+      title: item.title,
+      artist: item.artist,
+      duration: item.duration,
+    }))
+  );
+
+  let ytDlpProbe: any = null;
+  if (videoId) {
+    const started = Date.now();
+    const stream = await resolveWithYtDlp(videoId, Date.now() + 15000);
+    ytDlpProbe = {
+      videoId,
+      ok: Boolean(stream?.url),
+      elapsedMs: Date.now() - started,
+      stream: stream?.url ? (stream.url.includes(".m3u8") ? "hls" : "progressive") : null,
+    };
+  }
+
+  res.json({
+    target: identity,
+    query,
+    budgetMs: RESOLVE_BUDGET_MS,
+    ytDlp: { available: isYtDlpAvailable(), path: ytDlpBinaryPath() },
+    ytDlpProbe,
+    backends,
+    totalMs: Date.now() - startedAt,
+  });
 });
 
 // Audio Stream Proxy with Byte Range Seeking

@@ -47,10 +47,10 @@ export async function resolveOctaveTrack(track: {
   artist?: string;
   duration?: number;
   previewUrl?: string;
-}): Promise<StreamResolutionResult | null> {
+}, deadline?: number): Promise<StreamResolutionResult | null> {
   const identity = { title: track.name, artist: track.artist, duration: track.duration };
 
-  const full = await resolveFullLengthAudio(identity);
+  const full = await resolveFullLengthAudio(identity, deadline);
   if (full) return full;
 
   if (track.previewUrl?.startsWith("http")) {

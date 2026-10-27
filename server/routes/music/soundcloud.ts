@@ -1,10 +1,6 @@
 import { MusicTrackResult, StreamResolutionResult, formatSeconds } from "./types";
 import { resolveFullLengthAudio } from "./fullLength";
-import {
-  getValidSoundCloudClientId,
-  resolveSoundCloudStream,
-  searchSoundCloudTracks,
-} from "./soundcloudApi";
+import { resolveSoundCloudStream, searchSoundCloudTracks, soundcloudGet } from "./soundcloudApi";
 
 export { getValidSoundCloudClientId, resolveSoundCloudStream } from "./soundcloudApi";
 
@@ -17,13 +13,12 @@ export { getValidSoundCloudClientId, resolveSoundCloudStream } from "./soundclou
  */
 
 export async function searchSoundCloud(query: string, limit = 30): Promise<MusicTrackResult[]> {
-  const clientId = await getValidSoundCloudClientId();
   try {
-    const res = await fetch(
-      `https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(query)}&client_id=${clientId}&limit=${limit + 10}`,
-      { headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" }, signal: AbortSignal.timeout(6000) }
+    const res = await soundcloudGet(
+      `/search/tracks?q=${encodeURIComponent(query)}&limit=${limit + 10}`,
+      8000
     );
-    if (!res.ok) return [];
+    if (!res || !res.ok) return [];
 
     const data = await res.json();
     return (data.collection || [])
@@ -62,7 +57,7 @@ export async function resolveSoundCloudTrack(track: {
   name?: string;
   artist?: string;
   duration?: number;
-}): Promise<StreamResolutionResult | null> {
+}, deadline?: number): Promise<StreamResolutionResult | null> {
   const rawId = String(track.id || "").replace(/^sc_/, "");
   const seconds = Number(track.duration || 0);
 
@@ -81,5 +76,8 @@ export async function resolveSoundCloudTrack(track: {
   }
 
   // 2. The same recording, verified, elsewhere.
-  return resolveFullLengthAudio({ title: track.name, artist: track.artist, duration: track.duration });
+  return resolveFullLengthAudio(
+    { title: track.name, artist: track.artist, duration: track.duration },
+    deadline
+  );
 }

@@ -27,19 +27,20 @@ export interface StreamResolutionResult {
 }
 
 // Global In-Memory Cache
-const cache = new Map<string, { data: any; timestamp: number }>();
+const cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
 const CACHE_TTL = 1000 * 60 * 20; // 20 minutes
 
 export function getCached<T>(key: string): T | null {
   const item = cache.get(key);
-  if (item && Date.now() - item.timestamp < CACHE_TTL) {
+  if (item && Date.now() - item.timestamp < item.ttl) {
     return item.data as T;
   }
   return null;
 }
 
-export function setCache(key: string, data: any): void {
-  cache.set(key, { data, timestamp: Date.now() });
+/** `ttlMs` overrides the default 20 minutes (used for short-lived negatives). */
+export function setCache(key: string, data: any, ttlMs?: number): void {
+  cache.set(key, { data, timestamp: Date.now(), ttl: ttlMs && ttlMs > 0 ? ttlMs : CACHE_TTL });
   if (cache.size > 3000) {
     const oldestKey = cache.keys().next().value;
     if (oldestKey) cache.delete(oldestKey);
