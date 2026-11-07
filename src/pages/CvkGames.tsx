@@ -19,7 +19,7 @@ export default function CvkGames() {
   const loadCvkGames = async () => {
     setLoading(true);
     try {
-      // Fetch dynamic games list using quantil CDN as mandated
+      // Fetch the dynamic games list from the same CDN host as the catalogue
       const res = await fetch("https://cdn.jsdelivr.net/gh/WanoCapy/ChickenKingsVault@main/games.js");
       if (res.ok) {
         const text = await res.text();

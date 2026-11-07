@@ -102,6 +102,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const hlsRef = useRef<Hls | null>(null);
   const playRequestIdRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const warmedUrlRef = useRef<string | null>(null);
 
   // Sync refs to avoid stale closures inside event listeners
   const playlistRef = useRef<MusicTrack[]>(playlist);
@@ -114,6 +115,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     currentTrackRef.current = currentTrack;
+  }, [currentTrack]);
+
+  // Persist the track *including* the stream that was resolved for it. The play
+  // path saves the raw track before resolution, so after a reload the mini
+  // player knew the cover and the title but had no audio URL — every press of
+  // play re-resolved it from scratch (0.5s for SoundCloud, several seconds for
+  // the full-length catalogs).
+  useEffect(() => {
+    if (currentTrack) {
+      storage.setItem('app-music-current-track', JSON.stringify(currentTrack));
+    }
   }, [currentTrack]);
 
   useEffect(() => {
@@ -248,6 +260,48 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       audio.removeEventListener('ended', onEnded);
       audio.removeEventListener('error', onError);
     };
+  }, []);
+
+  // Warm the restored track once, without playing it.
+  //
+  // A restored track shows up in the mini player before any audio is attached,
+  // so pressing play paid for the entire chain on the click: resolve -> HLS
+  // playlist (27KB) -> init segment -> first fragment. Measured on SoundCloud
+  // that is ~1.4s of silence. Attaching the saved URL here lets the browser
+  // buffer it while the page is idle, so the click only has to resume.
+  useEffect(() => {
+    const audio = audioRef.current;
+    const savedUrl = currentTrackRef.current?.url;
+    if (!audio || !savedUrl) return;
+    if (!/^(https?:|\/api\/music\/)/i.test(savedUrl)) return;
+    if (warmedUrlRef.current === savedUrl) return;
+    warmedUrlRef.current = savedUrl;
+
+    const isHls = savedUrl.includes('.m3u8') || savedUrl.includes('hls') || savedUrl.includes('playlist');
+    if (isHls && Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        fragLoadingTimeOut: 8000,
+        manifestLoadingTimeOut: 8000
+      });
+      hlsRef.current = hls;
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (!data.fatal) return;
+        // Signed stream URLs expire (SoundCloud's in ~a day). Leave the element
+        // cold so the first click re-resolves instead of failing silently.
+        hls.destroy();
+        if (hlsRef.current === hls) hlsRef.current = null;
+        audio.removeAttribute('src');
+      });
+      hls.loadSource(savedUrl);
+      hls.attachMedia(audio);
+      return;
+    }
+
+    audio.preload = 'auto';
+    audio.src = savedUrl;
+    audio.load();
+    audio.addEventListener('error', () => audio.removeAttribute('src'), { once: true });
   }, []);
 
   // Update volume

@@ -1,14 +1,49 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html lang="en">
 <head>
-    <base href="https://cdn.jsdelivr.net/gh/genizy/web-port@latest/hotline-miami/">
-    <meta charset="utf-8"/>
-    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
-    <meta http-equiv="pragma" content="no-cache"/>
-    <meta name="apple-mobile-web-app-capable" content="yes"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"/>
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-    <title>HOTLINE MIAMI</title>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+    <base href="https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@latest/hotline-miami/">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
         body {
@@ -79,7 +114,12 @@
             80% { text-shadow: 0px 0px #00ffe5, 0px 0px #ffea00; }
             100% { text-shadow: 2px 2px #00ffe5, -2px -2px #ffea00; }
         }
-    </style>
+    
+
+
+
+
+</style>
 </head>
 <body>
 <script>
@@ -144,5 +184,7 @@
             setTimeout(() => loader.style.display = "none", 4000);
         };
     </script>
+
+
 </body>
 </html>

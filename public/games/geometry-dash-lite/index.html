@@ -2,6 +2,41 @@
 <html lang="en-US">
 
 <head>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
   <base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/gdlite/">
     <title>Geometry Dash Lite</title>
     <link rel="icon" type="image/png" href="https://e3334afd.cf-nate.pages.dev/0/g/geodash/game/splash.png">
@@ -181,7 +216,7 @@
         debug: true
       };  
     </script>
-    <script src="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@ac5cdfc0042aca584e72619375b4aca948a9243c/merge.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/merge.js"></script>
     <script src="Build/UnityLoader.js"></script>
     <script>
         var gameInstance = UnityLoader.instantiate("gameContainer", "Build/GeometryDashLite.json", {

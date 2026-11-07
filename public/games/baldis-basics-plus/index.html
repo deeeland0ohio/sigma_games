@@ -1,12 +1,52 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html lang="en-us">
   <head>
-    <base href="https://cdn.jsdelivr.net/gh/genizy/web-port@latest/baldi-plus/">
-    <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <title>Unity WebGL Player | Baldi's Basics Plus</title>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+    <base href="https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@latest/baldi-plus/">
     <link rel="shortcut icon" href="TemplateData/favicon.ico">
     <link rel="stylesheet" href="TemplateData/style.css">
+  
 </head>
   <body>
         <div
@@ -102,6 +142,12 @@
         );
         var warningBanner = document.querySelector("#unity-warning");
 
+        // Shows a temporary message banner/ribbon for a few seconds, or
+        // a permanent error message on top of the canvas if type=='error'.
+        // If type=='warning', a yellow highlight color is used.
+        // Modify or remove this function to customize the visually presented
+        // way that non-critical warnings and error messages are presented to the
+        // user.
         function unityShowBanner(msg, type) {}
 
       var buildUrl = "Build";
@@ -117,7 +163,15 @@
         showBanner: unityShowBanner,
       };
 
+        // By default Unity keeps WebGL canvas render target size matched with
+        // the DOM size of the canvas element (scaled by window.devicePixelRatio)
+        // Set this to false if you want to decouple this synchronization from
+        // happening inside the engine, and you would instead like to size up
+        // the canvas DOM size and WebGL render target sizes yourself.
+        // config.matchWebGLToCanvasSize = false;
+
         if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+          // Mobile device style: fill the whole browser client area with the game canvas:
           var meta = document.createElement("meta");
           meta.name = "viewport";
           meta.content =
@@ -144,5 +198,7 @@
         document.body.appendChild(script);
       })();
     </script>
+  
+
 </body>
 </html>

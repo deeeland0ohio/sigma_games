@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Game } from '../types';
 import { useThemeColors } from '../context/ThemeContext';
 import { useFavorites } from '../context/FavoritesContext';
-import { Heart, AlertTriangle } from 'lucide-react';
+import { Heart } from 'lucide-react';
 
 interface GameCardProps {
   game: Game;
@@ -14,8 +14,6 @@ interface GameCardProps {
 export default function GameCard({ game, to }: GameCardProps) {
   const colors = useThemeColors();
   const { isFavorite } = useFavorites();
-  const navigate = useNavigate();
-  const [showWarning, setShowWarning] = useState(false);
   const [imgError, setImgError] = useState(false);
 
   const Icon = game.icon;
@@ -26,26 +24,6 @@ export default function GameCard({ game, to }: GameCardProps) {
   }
   const targetPath = to || defaultPath;
   const favorited = isFavorite(game.id);
-
-  const handleClick = (e: React.MouseEvent) => {
-    if ((game.id === 'hollow-knight-silksong' || game.id === 'repo' || game.id === 'gn-math' || game.id === 'ugs' || game.id === 'seraph' || game.id === '3kh0' || game.id === 'noah' || game.id === 'alexr' || game.id === 'hydra' || game.id === 'diesmos' || game.id === 'lumin' || game.id === 'cvk') && !showWarning) {
-      e.preventDefault();
-      setShowWarning(true);
-    }
-  };
-
-  const handleConfirm = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setShowWarning(false);
-    navigate(targetPath);
-  };
-
-  const handleCancel = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setShowWarning(false);
-  };
 
   const isRed = game.id === 'gn-math';
   const isBlue = game.id === 'ugs';
@@ -68,49 +46,8 @@ export default function GameCard({ game, to }: GameCardProps) {
   const cardQuaternary = isRed ? 'text-red-500' : isBlue ? 'text-blue-500' : isPurple ? 'text-purple-500' : isTeal ? 'text-teal-500' : isOrange ? 'text-orange-500' : isGray ? 'text-zinc-400' : isCyan ? 'text-cyan-500' : isAmber ? 'text-amber-500' : (colors.quaternary || colors.secondary);
 
   return (
-    <>
-      {/* Warning Modal */}
-      {showWarning && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={handleCancel}>
-          <div 
-            className={`bg-zinc-900 border border-zinc-800 ${colors.shadow} rounded-xl p-6 max-w-md w-full shadow-2xl flex flex-col items-center text-center`}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className={`w-12 h-12 rounded-full ${colors.tertiaryBg || colors.secondaryBg} ${colors.groupHoverQuaternary || colors.groupHoverText || 'text-white'} flex items-center justify-center mb-4`}>
-              <AlertTriangle size={24} />
-            </div>
-            <h2 className="text-xl font-bold text-white mb-2">
-              {game.id === 'repo' ? 'Loading' : 
-               (game.id === 'gn-math' || game.id === 'ugs' || game.id === 'seraph' || game.id === '3kh0' || game.id === 'noah' || game.id === 'alexr' || game.id === 'hydra' || game.id === 'diesmos' || game.id === 'lumin' || game.id === 'cvk') ? 'Notice' : 'Warning!'}
-            </h2>
-            <p className="text-zinc-400 mb-6">
-              {game.id === 'repo' 
-                ? "If you see a black screen for a long time, don't worry it's just loading." 
-                : (game.id === 'gn-math' || game.id === 'ugs' || game.id === 'seraph' || game.id === '3kh0' || game.id === 'noah' || game.id === 'alexr' || game.id === 'hydra' || game.id === 'diesmos' || game.id === 'lumin' || game.id === 'cvk')
-                ? "These aren't hosted on my site, some games here might not work. And there might be ads."
-                : "This Game needs at least  4GB of ram to play! Your school Chromebook probably doesn't have that."}
-            </p>
-            <div className="flex gap-3 w-full">
-              <button
-                onClick={handleCancel}
-                className="flex-1 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg font-medium transition-colors"
-              >
-                {game.id === 'repo' ? 'Close' : 'Cancel'}
-              </button>
-              <button
-                onClick={handleConfirm}
-                className={`flex-1 py-2.5 ${colors.primaryBg} hover:opacity-90 text-white rounded-lg font-medium transition-opacity`}
-              >
-                {game.id === 'repo' ? 'Play Now' : 'I Understand'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <Link 
         to={targetPath}
-        onClick={handleClick}
         className={`group relative bg-zinc-900 border border-zinc-800 rounded-2xl p-6 ${cardHoverBorder} hover:shadow-xl ${cardHoverShadow} hover:bg-zinc-800/50 transition-all duration-300 flex flex-col items-start gap-4 overflow-hidden`}
       >
       <div className={`absolute inset-0 bg-gradient-to-br ${cardGradientFrom} ${cardGradientVia} ${cardGradientTo} opacity-0 group-hover:opacity-100 transition-opacity`} />
@@ -147,6 +84,5 @@ export default function GameCard({ game, to }: GameCardProps) {
         <p className="text-sm text-zinc-500 mt-1 whitespace-normal break-words">{game.description}</p>
       </div>
       </Link>
-    </>
   );
 }

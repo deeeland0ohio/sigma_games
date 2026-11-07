@@ -1,4 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { deriveBaseHref, normalizeGameHtml, rewriteGameHtml } from '../games/htmlRewrite';
+import { assetBaseUrl, fetchGameDocument } from '../games/sourceHost';
 
 export interface ContentFrameProps extends React.IframeHTMLAttributes<HTMLIFrameElement> {
   src?: string;
@@ -6,7 +8,24 @@ export interface ContentFrameProps extends React.IframeHTMLAttributes<HTMLIFrame
   reloadKey?: number;
 }
 
+// Keep the last few prepared documents so pressing reload on a game does not
+// refetch it. Bounded: a handful of these pages run to hundreds of KB.
+const HTML_CACHE_LIMIT = 8;
 const gameHtmlCache = new Map<string, string>();
+
+function cacheGet(key: string): string | undefined {
+  return gameHtmlCache.get(key);
+}
+
+function cachePut(key: string, html: string) {
+  gameHtmlCache.delete(key);
+  gameHtmlCache.set(key, html);
+  while (gameHtmlCache.size > HTML_CACHE_LIMIT) {
+    const oldest = gameHtmlCache.keys().next();
+    if (oldest.done) break;
+    gameHtmlCache.delete(oldest.value);
+  }
+}
 
 export function getJsDelivrUrl(url: string | undefined | null): string {
   if (!url || typeof url !== 'string') return '';
@@ -31,16 +50,9 @@ export function getJsDelivrUrl(url: string | undefined | null): string {
 
 export function cleanGameUrl(url: string | undefined | null): string {
   if (!url || typeof url !== 'string') return '';
-  let cleaned = getJsDelivrUrl(url);
+  const cleaned = getJsDelivrUrl(url);
   if (!cleaned || typeof cleaned !== 'string') return '';
-  // Normalize gn-math asset sources
-  cleaned = cleaned.replace(/\/gh\/gn-math\//gi, '/gh/freebuisness/');
-  // Keep domain as is, but normalize any outdated commit hashes or branches with @main for known repositories
-  cleaned = cleaned.replace(
-    /(https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/(?:aDiesmos|WanoCapy|3kh0|a456pur|greenday894|HydroXide1|Noah-Is-Awesome|alexr-hub|bubbls|lonya-k|genizy|degloved-net|freebuisness)\/([a-zA-Z0-9_-]+))@[a-zA-Z0-9_.-]+(\/|$)/g,
-    '$1@main$3'
-  );
-  return cleaned;
+  return normalizeGameHtml(cleaned);
 }
 
 export function isVideoEmbed(url: string | undefined | null): boolean {
@@ -96,245 +108,108 @@ export function isLocalGame(url: string | undefined | null): boolean {
   );
 }
 
+const GAME_ENGINE_MARKERS = ['<canvas', 'data.unityweb', 'Module=', 'GODOT_CONFIG', 'ruffle', 'kaboom(', 'Phaser.'];
+
+/** Find the real game document behind a wrapper page (up to 3 hops). */
+async function unwrapDocument(targetUrl: string): Promise<{ html: string; url: string } | null> {
+  let currentUrl = targetUrl;
+
+  for (let depth = 0; depth < 3; depth++) {
+    const page = await fetchGameDocument(currentUrl);
+    if (!page) return null;
+
+    const hasGameEngine = GAME_ENGINE_MARKERS.some((marker) => page.html.includes(marker));
+    if (hasGameEngine) return page;
+
+    const iframeMatch = page.html.match(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/i);
+    const innerSrc = iframeMatch?.[1]?.trim();
+    if (!innerSrc || isVideoEmbed(innerSrc) || innerSrc.startsWith('javascript:')) {
+      return page;
+    }
+    try {
+      // Wrapper pages often iframe the real game one level down; follow it
+      // relative to the document we just read.
+      currentUrl = cleanGameUrl(new URL(innerSrc, page.url).href);
+    } catch (urlErr) {
+      return page;
+    }
+  }
+
+  return fetchGameDocument(currentUrl);
+}
+
 export default function ContentFrame({ src, srcDoc, reloadKey, allow, allowFullScreen = true, ...props }: ContentFrameProps) {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [fallbackSrc, setFallbackSrc] = useState<string | undefined>(undefined);
+  // A document we fetched and re-typed, handed to the frame through srcdoc.
+  // The frame never navigates for these, so a CDN that answers `text/plain`
+  // (jsdelivr, with nosniff) or `X-Frame-Options: DENY` cannot break it.
+  const [inlineDoc, setInlineDoc] = useState<string | undefined>(srcDoc);
+  const [frameSrc, setFrameSrc] = useState<string | undefined>(undefined);
 
   useEffect(() => {
-    // If srcDoc is provided directly, let React handle it via the prop
-    if (srcDoc) return;
-    
-    if (src) {
-      const targetUrl = normalizeEmbedUrl(src);
-      if (!targetUrl) return;
-      
-      let isMounted = true;
+    if (srcDoc) {
+      setInlineDoc(srcDoc);
+      setFrameSrc(undefined);
+      return;
+    }
 
-      // Video embeds (YouTube, TikTok) and local game files run natively in the iframe
-      if (isVideoEmbed(targetUrl) || isLocalGame(targetUrl)) {
-        setFallbackSrc(targetUrl);
+    if (!src) {
+      setInlineDoc(undefined);
+      return;
+    }
+
+    const targetUrl = normalizeEmbedUrl(src);
+    if (!targetUrl) return;
+
+    // Video embeds and our own games are already served with the correct type
+    // by a host that allows framing, so they load natively - no fetching.
+    if (isVideoEmbed(targetUrl) || isLocalGame(targetUrl)) {
+      setInlineDoc(undefined);
+      setFrameSrc(targetUrl);
+      return;
+    }
+
+    const cached = cacheGet(targetUrl);
+    if (cached) {
+      setInlineDoc(cached);
+      setFrameSrc(undefined);
+      return;
+    }
+
+    let cancelled = false;
+
+    (async () => {
+      const resolved = await unwrapDocument(targetUrl);
+      if (cancelled) return;
+
+      if (!resolved) {
+        // Nothing fetched: let the browser try the URL directly as a last resort.
+        setInlineDoc(undefined);
+        setFrameSrc(targetUrl);
         return;
       }
 
-      const iframe = iframeRef.current;
-      const doc = iframe?.contentDocument || iframe?.contentWindow?.document;
+      // The document is ours to run; its files load from the repo's Pages site
+      // when it has one, because Pages types scripts/wasm for execution.
+      const baseHref = assetBaseUrl(resolved.url) ?? deriveBaseHref(resolved.html, resolved.url);
+      const prepared = rewriteGameHtml(resolved.html, { baseHref });
+      cachePut(targetUrl, prepared);
 
-      // If already cached, directly re-inject the pristine game code
-      if (gameHtmlCache.has(targetUrl)) {
-        const cachedHtml = gameHtmlCache.get(targetUrl)!;
-        if (doc) {
-          doc.open();
-          doc.write(cachedHtml);
-          doc.close();
-          return;
-        }
-      }
+      if (cancelled) return;
+      setInlineDoc(prepared);
+      setFrameSrc(undefined);
+    })();
 
-      const fetchHtml = async (fetchUrl: string): Promise<string | null> => {
-        try {
-          const response = await fetch(fetchUrl);
-          if (response.ok) {
-            return await response.text();
-          }
-        } catch (err) {
-          // Fallback to server content loader
-        }
-        try {
-          const proxyRes = await fetch(`/api/content-loader?url=${encodeURIComponent(fetchUrl)}`);
-          if (proxyRes.ok) {
-            return await proxyRes.text();
-          }
-        } catch (proxyErr) {
-          console.warn("Content loader fetch failed:", proxyErr);
-        }
-        return null;
-      };
-
-      const loadContent = async () => {
-        let currentUrl = targetUrl;
-        let html: string | null = null;
-
-        // Recursive unwrapping (up to 3 levels) for wrapper pages
-        for (let depth = 0; depth < 3; depth++) {
-          const fetched = await fetchHtml(currentUrl);
-          if (!fetched) break;
-          html = fetched;
-
-          const hasGameEngine = (
-            html.includes('<canvas') ||
-            html.includes('data.unityweb') ||
-            html.includes('Module=') ||
-            html.includes('GODOT_CONFIG') ||
-            html.includes('ruffle') ||
-            html.includes('kaboom(') ||
-            html.includes('Phaser.')
-          );
-
-          if (!hasGameEngine) {
-            const iframeMatch = html.match(/<iframe\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/i);
-            if (iframeMatch && iframeMatch[1]) {
-              const innerSrc = iframeMatch[1].trim();
-              if (innerSrc && !isVideoEmbed(innerSrc) && !innerSrc.startsWith('javascript:')) {
-                try {
-                  const resolvedUrl = new URL(innerSrc, currentUrl).href;
-                  currentUrl = cleanGameUrl(resolvedUrl);
-                  continue;
-                } catch (urlErr) {
-                  // Fall through
-                }
-              }
-            }
-          }
-          break;
-        }
-
-        if (html && isMounted) {
-          // 1. Switch any gn-math to freebuisness
-          html = html.replace(/\/gh\/gn-math\//gi, '/gh/freebuisness/');
-
-          // 2. Rewrite broken commit hashes globally inside the HTML, preserving the original domain
-          html = html.replace(
-            /(https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/(?:aDiesmos|WanoCapy|3kh0|a456pur|greenday894|HydroXide1|Noah-Is-Awesome|alexr-hub|bubbls|lonya-k|degloved-net|freebuisness)\/([a-zA-Z0-9_-]+))@[a-zA-Z0-9_.-]+(\/|$)/g,
-            '$1@main$3'
-          );
-
-          // 2b. Map blocked jsdelivr genizy repositories to content-loader proxy
-          html = html.replace(
-            /https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/genizy\/([^/@]+)(?:@([^\/'" >]+))?\//gi,
-            (_match, repo, branch) => {
-              const b = branch && branch !== 'latest' ? branch : 'main';
-              return `/api/content-loader/raw.githubusercontent.com/genizy/${repo}/${b}/`;
-            }
-          );
-
-          // 3. Strip overlay widgets that clutter the UI
-          html = html.replace(/<script[^>]*src="[^"]*arc\.io[^"]*"[^>]*><\/script>/gi, '<!-- stripped overlay -->');
-
-          // 4. Strip external analytics scripts
-          html = html.replace(/<script[^>]*src="[^"]*googletagmanager\.com[^"]*"[^>]*><\/script>/gi, '<!-- stripped analytics -->');
-          html = html.replace(/gtag\s*\([^)]*\);?/gi, '');
-
-          // 5. Replace missing root-relative script references
-          html = html.replace(/src=["']\/js\/main\.js["']/gi, 'src="data:text/javascript,console.log(\'main.js loaded\')"');
-
-          // 6. Inject safe localStorage / sessionStorage polyfill to prevent access errors in sandboxed documents
-          const storagePolyfill = `<script>
-            (function() {
-              var mem = {};
-              var sessionMem = {};
-              try {
-                window.localStorage.getItem('__test__');
-              } catch(e) {
-                try {
-                  Object.defineProperty(window, 'localStorage', {
-                    value: {
-                      getItem: function(k) { return mem[k] !== undefined ? mem[k] : null; },
-                      setItem: function(k, v) { mem[k] = String(v); },
-                      removeItem: function(k) { delete mem[k]; },
-                      clear: function() { mem = {}; },
-                      key: function(i) { return Object.keys(mem)[i] || null; },
-                      get length() { return Object.keys(mem).length; }
-                    },
-                    configurable: true,
-                    writable: true
-                  });
-                  Object.defineProperty(window, 'sessionStorage', {
-                    value: {
-                      getItem: function(k) { return sessionMem[k] !== undefined ? sessionMem[k] : null; },
-                      setItem: function(k, v) { sessionMem[k] = String(v); },
-                      removeItem: function(k) { delete sessionMem[k]; },
-                      clear: function() { sessionMem = {}; },
-                      key: function(i) { return Object.keys(sessionMem)[i] || null; },
-                      get length() { return Object.keys(sessionMem).length; }
-                    },
-                    configurable: true,
-                    writable: true
-                  });
-                } catch(err) {}
-              }
-            })();
-          </script>`;
-
-          // 7. Inject base tag so relative assets load correctly:
-          if (!html.includes('<base ')) {
-            let effectiveBaseUrl = '';
-            const cdnMatch = html.match(/(https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/[^\s"'><]+|https?:\/\/(?:raw\.githack\.com|rawcdn\.githack\.com)\/[^\s"'><]+)/i);
-            if (cdnMatch && cdnMatch[1]) {
-              const cdnAssetUrl = cleanGameUrl(cdnMatch[1]);
-              effectiveBaseUrl = cdnAssetUrl.substring(0, cdnAssetUrl.lastIndexOf('/') + 1);
-            } else if (currentUrl.startsWith('http://') || currentUrl.startsWith('https://')) {
-              effectiveBaseUrl = currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
-            } else if (currentUrl.startsWith('/')) {
-              effectiveBaseUrl = window.location.origin + currentUrl.substring(0, currentUrl.lastIndexOf('/') + 1);
-            }
-
-            if (effectiveBaseUrl) {
-              const baseTag = `<base href="${effectiveBaseUrl}">`;
-              if (html.includes('<head>')) {
-                html = html.replace('<head>', `<head>\n${baseTag}\n${storagePolyfill}`);
-              } else if (html.includes('<html>')) {
-                html = html.replace('<html>', `<html>\n<head>\n${baseTag}\n${storagePolyfill}\n</head>`);
-              } else {
-                html = `${baseTag}\n${storagePolyfill}\n${html}`;
-              }
-            } else {
-              if (html.includes('<head>')) {
-                html = html.replace('<head>', `<head>\n${storagePolyfill}`);
-              } else if (html.includes('<html>')) {
-                html = html.replace('<html>', `<html>\n<head>\n${storagePolyfill}\n</head>`);
-              } else {
-                html = `${storagePolyfill}\n${html}`;
-              }
-            }
-          } else {
-            if (html.includes('<head>')) {
-              html = html.replace('<head>', `<head>\n${storagePolyfill}`);
-            } else {
-              html = `${storagePolyfill}\n${html}`;
-            }
-          }
-
-          gameHtmlCache.set(targetUrl, html);
-
-          const curDoc = iframeRef.current?.contentDocument || iframeRef.current?.contentWindow?.document;
-          if (curDoc) {
-            curDoc.open();
-            curDoc.write(html);
-            curDoc.close();
-            return;
-          }
-        }
-
-        if (isMounted) {
-          setFallbackSrc(currentUrl || targetUrl);
-        }
-      };
-
-      loadContent();
-
-      return () => {
-        isMounted = false;
-        if (iframeRef.current) {
-           const docToClean = iframeRef.current.contentDocument || iframeRef.current.contentWindow?.document;
-           if (docToClean) {
-               try {
-                 docToClean.open();
-                 docToClean.write('');
-                 docToClean.close();
-               } catch (e) {}
-           }
-        }
-      };
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [src, srcDoc, reloadKey]);
 
   const defaultAllow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen";
 
   return (
     <iframe
-      ref={iframeRef}
-      src={fallbackSrc}
-      srcDoc={srcDoc}
+      src={inlineDoc ? undefined : frameSrc}
+      srcDoc={inlineDoc}
       allow={allow || defaultAllow}
       allowFullScreen={allowFullScreen}
       referrerPolicy={props.referrerPolicy || "strict-origin-when-cross-origin"}

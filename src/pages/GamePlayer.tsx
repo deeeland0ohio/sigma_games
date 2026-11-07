@@ -2,7 +2,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { games, allGamesList, Game } from '../games';
 import ContentFrame from '../components/ContentFrame';
-import { ArrowLeft, Maximize2, Terminal, Github, RefreshCcw, Heart, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Maximize2, Terminal, Github, RefreshCcw, Heart } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import SettingsMenu from '../components/SettingsMenu';
 import Credits from '../components/Credits';
@@ -15,20 +15,12 @@ export default function GamePlayer() {
   const colors = useThemeColors();
   const { toggleFavorite, isFavorite } = useFavorites();
   const [reloadKey, setReloadKey] = useState(0);
-  const [showPopup, setShowPopup] = useState(false);
   const [iframeUrl, setIframeUrl] = useState<string | undefined>(game?.url);
   const navigate = useNavigate();
 
   useEffect(() => {
     setIframeUrl(game?.url);
   }, [game?.url]);
-
-  useEffect(() => {
-    const popupGames = ['crazy-cattle-3d', 'basket-random', 'soccer-random', 'boxing-random', 'geometry-dash', 'basket-bros', 'baseball-bros', 'football-bros', 'wrestle-bros', 'kart-bros', 'soccer-bros'];
-    if (id && popupGames.includes(id)) {
-      setShowPopup(true);
-    }
-  }, [id]);
 
   if (!game) {
     return (
@@ -42,23 +34,6 @@ export default function GamePlayer() {
       </div>
     );
   }
-
-  const handleIframeLaunch = () => {
-    if (id === 'basket-bros') {
-      setIframeUrl('https://basketbros.io/');
-    } else if (id === 'baseball-bros') {
-      setIframeUrl('https://baseballbros.io/');
-    } else if (id === 'football-bros') {
-      setIframeUrl('https://footballbros.io/');
-    } else if (id === 'wrestle-bros') {
-      setIframeUrl('https://wrestlebros.io/');
-    } else if (id === 'kart-bros') {
-      setIframeUrl('https://kartbros.io/');
-    } else if (id === 'soccer-bros') {
-      setIframeUrl('https://soccerbros.gg/og/');
-    }
-    setShowPopup(false);
-  };
 
   const toggleFullscreen = () => {
     const elem = document.getElementById('game-container');
@@ -159,62 +134,6 @@ export default function GamePlayer() {
           )}
         </div>
 
-        {/* Game Specific Popups */}
-        {showPopup && (
-          <div className="absolute inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              className={`max-w-md w-full bg-zinc-900 border border-zinc-800 rounded-2xl p-8 shadow-2xl ${colors.shadow} flex flex-col items-center text-center`}
-            >
-              <div className={`w-16 h-16 rounded-full ${colors.tertiaryBg || colors.secondaryBg} ${colors.groupHoverQuaternary || colors.groupHoverText || 'text-white'} flex items-center justify-center mb-6`}>
-                <AlertTriangle size={32} />
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-4">Notice!</h2>
-              <p className="text-zinc-400 leading-relaxed mb-8 text-lg">
-                {id === 'basket-bros' || id === 'baseball-bros' || id === 'football-bros' || id === 'wrestle-bros' || id === 'kart-bros' || id === 'soccer-bros' ? (
-                  "This code can't support multiplayer, use the iframe launch to play multiplayer. It will also have ads and may be blocked if launched in iframe."
-                ) : id === 'geometry-dash'
-                  ? "Some levels in this game may be missing some textures so, some levels may be unplayable :("
-                  : id === 'basket-random' || id === 'soccer-random' || id === 'boxing-random'
-                  ? "The ads you see on this game are NOT from this website they are embedded in the code."
-                  : "This website is an ad free unblocked games website, don't worry about the 'unofficial port' popup you will see in game. This website would be classified as an 'other ad-free \"unblocked game\" website'."}
-              </p>
-              
-              {id === 'basket-bros' || id === 'baseball-bros' || id === 'football-bros' || id === 'wrestle-bros' || id === 'kart-bros' || id === 'soccer-bros' ? (
-                <div className="flex flex-col gap-3 w-full">
-                  <button
-                    onClick={() => setShowPopup(false)}
-                    className="w-full py-4 rounded-xl font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98] bg-zinc-800 hover:bg-zinc-700"
-                  >
-                    Stay on regular {id === 'basket-bros' ? 'basket bros' : id === 'baseball-bros' ? 'baseball bros' : id === 'football-bros' ? 'football bros' : id === 'wrestle-bros' ? 'wrestle bros' : id === 'kart-bros' ? 'kart bros' : 'soccer bros'}
-                  </button>
-                  <button
-                    onClick={handleIframeLaunch}
-                    className={`w-full py-4 rounded-xl font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98] ${colors.primaryBg} shadow-lg ${colors.shadow}`}
-                  >
-                    Iframe launch (Highly Recommended)
-                  </button>
-                  {id === 'soccer-bros' && (
-                    <button
-                      onClick={() => { setIframeUrl('https://soccerbros.gg/'); setShowPopup(false); }}
-                      className={`w-full py-4 rounded-xl font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98] ${colors.primaryBg} shadow-lg ${colors.shadow}`}
-                    >
-                      Soccer Bros 2 iframe (Highly Recommended)
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowPopup(false)}
-                  className={`w-full py-4 rounded-xl font-bold text-white transition-all hover:scale-[1.02] active:scale-[0.98] ${colors.primaryBg} shadow-lg ${colors.shadow}`}
-                >
-                  UNDERSTOOD
-                </button>
-              )}
-            </motion.div>
-          </div>
-        )}
       </main>
     </div>
   );

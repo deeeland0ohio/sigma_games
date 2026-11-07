@@ -1,8 +1,50 @@
-<!doctype html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!doctype html>
 <html>
 
 <head>
-    <base href="https://cdn.jsdelivr.net/gh/genizy/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/">
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+    <base href="https://cdn.jsdelivr.net/gh/bubblfan/polytrack@feb7f045e85fdf07e0d7f7e6d0f08984b9fe20d6/">
     <script>
         window.jkdfgnjkndfg = document.querySelector('base').href;
         fetch("simulation_worker.bundle.js").then(res => res.text()).then(text => {
@@ -56,20 +98,19 @@
             return ogxml.call(this, method, url, ...rest);
         };
     </script>
-    <meta charset="utf-8">
     <link rel="preload" href="forced_square.woff2" as="font" type="font/woff2" crossorigin="anonymous" />
     <link rel="preload" href="images/logo.svg" as="image" type="image/svg+xml" />
     <link rel="preload" href="images/discord.svg" as="image" type="image/svg+xml" />
     <link rel="manifest" href="manifest.json" />
-    <meta name="viewport"
-        content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,viewport-fit=cover,user-scalable=no">
     <script defer="defer" src="error_screen.bundle.js"></script>
     <script defer="defer" src="main.bundle.js"></script>
+
 </head>
 
 <body><canvas id="screen"></canvas>
     <div id="ui"></div>
     <div id="transition-layer"></div>
+
 </body>
 
 </html>

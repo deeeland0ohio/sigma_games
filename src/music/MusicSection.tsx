@@ -104,7 +104,7 @@ export default function MusicSection() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
-  const [musicSource, setMusicSource] = useState<MusicSource>('octave');
+  const [musicSource, setMusicSource] = useState<MusicSource>('soundcloud');
 
   // Load initial trending music on mount
   useEffect(() => {

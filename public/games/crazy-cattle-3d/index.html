@@ -1,10 +1,64 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html lang="en">
 	<head>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+		
+		
+		
 		<base href="https://rawcdn.githack.com/genizy/cc3d-mobile/main/">
-		<meta charset="utf-8">
-		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-		<title>Crazy Cattle 3D</title>
+		       <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5521219086088837"
+     crossorigin="anonymous"></script>
+     
+		<style>
+  html, body {
+    margin: 0;
+    overflow: hidden;
+    touch-action: none;
+  }
+
+</style>
+
 		<style>
 html, body, #canvas {
 	margin: 0;
@@ -53,8 +107,8 @@ body {
 	margin: auto;
 }
 
-#status-splash.show-image--true {
-	display: block;
+#status-splash.show-image--false {
+	display: none;
 }
 
 #status-splash.fullsize--true {
@@ -235,5 +289,7 @@ const engine = new Engine(GODOT_CONFIG);
     e.returnValue = '';
   });
 </script>
+
+	
 </body>
 </html>

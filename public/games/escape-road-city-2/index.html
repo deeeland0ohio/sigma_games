@@ -1,46 +1,100 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en-us">
 <head>
-  <meta charset="utf-8" />
-  <title>Escape Road City 2</title>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+    <base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/escaperoad2city/">
   <style>
     html, body { background: #000; width: 100%; height: 100%; overflow: hidden; padding: 0; margin: 0; }
     #gameContainer { position: absolute; }
     #gameContainer canvas { position: absolute; }
-    #loadingBar { color:white; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); font-family:Arial; }
   </style>
 </head>
 <body>
+
+  <script id="gmsoft-jssdk" src="gmsoftsdk_v5.js"></script>
+
   <div id="gameContainer" style="display:none;">
     <canvas id="unity-canvas"></canvas>
   </div>
-  <div id="loadingBar">
+
+  <div id="loadingBar" style="color:white; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); font-family:Arial;">
     loading... <span id="pct">0%</span>
   </div>
 <script>
-  window.fileMergerConfig = {
-    files: [
-      { name: 'escape-road-city-2-v25022604.data.unityweb', parts: 2 },
-    ],
-    basePath: 'https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/escaperoad2city/Build/',
-    debug: true
-  };
+  function firebaseLogEvent(event_name) {
+    console.log('firebaseLogEvent (stubbed):', event_name);
+  }
+  function firebaseLogEventParameter(event_name, event_param) {
+    console.log('firebaseLogEventParameter (stubbed):', event_name, event_param);
+  }
+  function firebaseSetUserProperties(props) {
+    console.log('firebaseSetUserProperties (stubbed):', props);
+  }
 </script>
-<script src="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/merge.js"></script>
-<script>
+       //script>
+      window.fileMergerConfig = {
+        files: [
+          { name: 'escape-road-city-2-v25022604.data.unityweb', parts: 2 },
+        ],
+        basePath: 'Build/',
+        debug: true
+      };
+    script>
+
+    //cript src="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/merge.js"></script>
+  <script>
     var canvas = document.getElementById("unity-canvas");
     var container = document.getElementById("gameContainer");
     var loadingBar = document.getElementById("loadingBar");
 
-    var buildUrl = "https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/escaperoad2city/Build";
+    var buildUrl = "Build";
     var config = {
       dataUrl:         buildUrl + "/escape-road-city-2-v25022604.data.unityweb",
       frameworkUrl:    buildUrl + "/escape-road-city-2-v25022604.framework.js.unityweb",
       codeUrl:         buildUrl + "/escape-road-city-2-v25022604.wasm.unityweb",
       streamingAssetsUrl: "StreamingAssets",
       companyName: "azgames.io",
-      productName: "Escape Road City 2",
+      productName: "Tung Sahur Horror",
       productVersion: "25051505",
+      pubId: "",
+      gameId: "tung-sahur-horror",
+      enableMoreGame: "yes",
+      enablePromotion: true,
+      eventLog: false
     };
 
     function onResize() {

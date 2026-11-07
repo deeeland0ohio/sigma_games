@@ -1,14 +1,56 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
+
+
+<!-- Ultimate Game Stash file--> 
+<!-- For the regularly updating doc go to https://docs.google.com/document/d/1_FmH3BlSBQI7FGgAQL59-ZPe8eCxs35wel6JUyVaG8Q/ --> 
+
+
 <html lang="en-us">
+<base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/half%20life/">
 <head>
-	<base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@354e3c6939a08e472482653567d566ba3a2aa527/half%20life/">
-	<meta charset="utf-8">
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
 	<link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-	<meta name="MobileOptimized" content="640" />
-	<meta name="HandheldFriendly" content="true" />
-	<title>Half-Life</title>
 	<script>
 		document.addEventListener('contextmenu', event => event.preventDefault());
 		window.onbeforeunload = function(e) {
@@ -219,7 +261,12 @@
 		if (document.createElement("detect").style.textShadow==="") {
 			document.getElementsByTagName("html")[0].className+=" textshadow";
 		}
-	</style>
+	
+
+
+
+
+</style>
 </head>
 
 <body onerror=alert(event); bgcolor=#555555 text=#F0B418 link=#ffa600 vlink=#ffa600>
@@ -692,6 +739,16 @@
 			else document.getElementById('output').style.display = "none";
 		});
 		document.getElementById('label_show_console_log').style.display = "inline-block";
+		/*(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-68666752-4', 'auto');
+		ga('send', 'pageview');*/
 	</script>
+
+
 </body>
+
 </html>

@@ -32,7 +32,6 @@ try {
 }
 
 import apiRouter from "./server/routes/index";
-import { gameAssetInterceptor } from "./server/middleware/gameAssetInterceptor";
 
 async function startServer() {
   const app = express();
@@ -44,9 +43,6 @@ async function startServer() {
 
   // Modular API Routes
   app.use("/api", apiRouter);
-
-  // Intercept local game HTML to inject storage polyfill & fix CDN hashes
-  app.get(["/games/*/index.html", "/games/*"], gameAssetInterceptor);
 
   const publicDir = path.join(process.cwd(), "public");
   const distDir = path.join(process.cwd(), "dist");

@@ -21,14 +21,14 @@ musicRouter.get("/sources", (_req: Request, res: Response) => {
       { id: "youtube", name: "YouTube Music", description: "Vast Global Video & Audio Library", quality: "Full Length HD", icon: "youtube" },
       { id: "soundcloud", name: "SoundCloud", description: "Indie, EDM, Hip-Hop & Remixes", quality: "128k MP3", icon: "cloud" }
     ],
-    defaultSource: "deezer"
+    defaultSource: "soundcloud"
   });
 });
 
 // Search Endpoint (Delegates to source-specific handler)
 musicRouter.get("/search", async (req: Request, res: Response) => {
   const query = ((req.query.keyword || req.query.q || "") as string).trim();
-  const source = ((req.query.source || "deezer") as string).toLowerCase();
+  const source = ((req.query.source || "soundcloud") as string).toLowerCase();
   const limit = Math.min(Number(req.query.limit) || 30, 50);
 
   if (!query) {
@@ -57,7 +57,7 @@ musicRouter.get("/search", async (req: Request, res: Response) => {
         results = await searchSoundCloud(query, limit);
         break;
       default:
-        results = await searchDeezer(query, limit);
+        results = await searchSoundCloud(query, limit);
         break;
     }
 
@@ -70,7 +70,7 @@ musicRouter.get("/search", async (req: Request, res: Response) => {
 
 // Trending Endpoint
 musicRouter.get("/trending", async (req: Request, res: Response) => {
-  const source = ((req.query.source || "deezer") as string).toLowerCase();
+  const source = ((req.query.source || "soundcloud") as string).toLowerCase();
   const limit = Math.min(Number(req.query.limit) || 30, 50);
 
   const cacheKey = `trending:${source}:${limit}`;
@@ -89,10 +89,15 @@ musicRouter.get("/trending", async (req: Request, res: Response) => {
         results = await searchOctave("Billboard Hot 100", limit);
         break;
       case "soundcloud":
-        results = await searchSoundCloud("Trending Pop", limit);
+      default:
+        // SoundCloud's search happily returns hour-long album uploads, which is
+        // not what the landing page should open on now that this is the default
+        // source: ask for more than needed and keep the real tracks.
+        results = (await searchSoundCloud("Trending Pop", limit * 2))
+          .filter((song: any) => !song.duration || song.duration <= 20 * 60)
+          .slice(0, limit);
         break;
       case "youtube":
-      default:
         results = await searchYouTube("Trending Music Official Audio", limit);
         break;
     }

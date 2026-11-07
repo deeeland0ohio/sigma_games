@@ -1,10 +1,49 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html lang="en-us">
 <head>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
   <base href="https://cdn.jsdelivr.net/gh/web-ports/granny@main/">
-  <meta charset="utf-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <title>Granny</title>
 
   <link rel="shortcut icon" href="TemplateData/favicon.ico">
   <script src="TemplateData/UnityProgress.js"></script>
@@ -49,14 +88,9 @@
   100% { background-position: 0% 50%; }
 }
   </style>
-</head>
-
-<body>
-  <div id="loading-text"
+<div id="loading-text"
     style="color: white; font-size: 48px; font-family: cursive; text-align: center; margin-top: 20px;"> LOADING...
   </div>
-  <div id="unityContainer"></div>
-
   <script>
     var loadingText = document.querySelector("#loading-text");
     let totalBytes = 0;
@@ -123,5 +157,12 @@
     loadingText.remove();
     })();
   </script>
+</head>
+
+<body>
+
+  <div id="unityContainer"></div>
+
+
 </body>
 </html>

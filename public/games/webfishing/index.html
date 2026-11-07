@@ -1,10 +1,49 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html xmlns='http://www.w3.org/1999/xhtml' lang='' xml:lang=''>
 <head>
-	<base href="https://cdn.jsdelivr.net/gh/genizy/web-port@main/web-fishing/">
-	<meta charset='utf-8' />
-	<meta name='viewport' content='width=device-width, user-scalable=no' />
-	<title>Webfishing</title>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+	<base href="https://cdn.jsdelivr.net/gh/giorgirick2-gif/game-webports-onawebsite@main/web-fishing/">
 	<style type='text/css'>
 
 		body {
@@ -112,6 +151,11 @@
 			padding: 4px 6px;
 			visibility: visible;
 		}
+	
+
+
+
+
 </style>
 <link id='-gd-engine-icon' rel='icon' type='image/png' href='webfishing.icon.png' />
 <link rel='apple-touch-icon' href='webfishing.apple-touch-icon.png'/>
@@ -244,5 +288,8 @@
 			}
 		};
 	//]]></script>
+
+
 </body>
 </html>
+

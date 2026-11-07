@@ -2,22 +2,57 @@
 <html>
 
 <head>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
   <meta charset="UTF-8" />
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <title>OvO Dimensions</title>
   <meta name="robots" content="noindex,nofollow" />
-  <base href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/">
+  <base href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/">
   <!-- Standardised web app manifest -->
-  <link rel="manifest" href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/appmanifest.json" />
+  <link rel="manifest" href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/appmanifest.json" />
   <!-- Allow fullscreen mode on iOS devices. (These are Apple specific meta tags.) -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black" />
-  <link rel="apple-touch-icon" sizes="256x256" href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/icon-256.png" />
+  <link rel="apple-touch-icon" sizes="256x256" href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/icon-256.png" />
   <meta name="HandheldFriendly" content="true" />
   <!-- Chrome for Android web app tags -->
   <meta name="mobile-web-app-capable" content="yes" />
-  <link rel="shortcut icon" sizes="256x256" href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/icon-256.png" />
+  <link rel="shortcut icon" sizes="256x256" href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/icon-256.png" />
   <!-- All margins and padding must be zero for the canvas to fill the screen. -->
   <style type="text/css">
     * {
@@ -39,9 +74,9 @@
       -ms-touch-action: none;
     }
   </style>
-  <link href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/animate.css" rel="stylesheet" type="text/css" />
-  <link href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/hmmg_layoutTransition.css" rel="stylesheet" type="text/css" />
-  <link href="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/jquery.gritter.css" rel="stylesheet" type="text/css" />
+  <link href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/animate.css" rel="stylesheet" type="text/css" />
+  <link href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/hmmg_layoutTransition.css" rel="stylesheet" type="text/css" />
+  <link href="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/jquery.gritter.css" rel="stylesheet" type="text/css" />
 </head>
 
 <body>
@@ -63,14 +98,14 @@
   </div>
   <!-- Pages load faster with scripts at the bottom -->
   <!-- Construct 2 exported games require jQuery. -->
-  <script src="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/jquery-3.4.1.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/Tween.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/html2canvas.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/jquery.gritter.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/howler.js"></script>
+  <script src="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/jquery-3.4.1.min.js"></script>
+  <script src="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/Tween.js"></script>
+  <script src="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/html2canvas.min.js"></script>
+  <script src="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/jquery.gritter.js"></script>
+  <script src="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/howler.js"></script>
   <!-- The runtime script.  You can rename it, but don't forget to rename the reference here as well.
     This file will have been minified and obfuscated if you enabled "Minify script" during export. -->
-  <script src="https://cdn.jsdelivr.net/gh/genizy/ovo-3-dimension@102179bf4242fd237c46c555ba154c2f325d351c/c2runtime.js"></script>
+  <script src="/api/content-loader/raw.githubusercontent.com/genizy/ovo-3-dimension/main/c2runtime.js"></script>
   <script>
     // Start the Construct 2 project running on window load.
     jQuery(document).ready(function() {

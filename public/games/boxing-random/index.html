@@ -1,14 +1,49 @@
 <!doctype html>
 <html>
 <head>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
 	<meta charset="UTF-8">
 	<title>Boxing Random</title>
-	<base href="https://cdn.jsdelivr.net/gh/bubbls/ruffle@25f6152ab54ec5409c832c904ed3e5e482600d6a/">
+	<base href="https://cdn.jsdelivr.net/gh/bubbls/ruffle@main/">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no">
 	<meta name="generator" content="Scirra Construct">
 	<meta name="author" content="TwoPlayerGames">
 
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bubbls/ruffle@25f6152ab54ec5409c832c904ed3e5e482600d6a/boxstyle.css" type="text/css">
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/bubbls/ruffle@main/boxstyle.css" type="text/css">
     <style>
         body {
             margin: 0;
@@ -40,16 +75,16 @@
         });
     </script>
 
-	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@25f6152ab54ec5409c832c904ed3e5e482600d6a/boxwasm.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@main/boxwasm.js"></script>
 	<noscript>
 		<div id="notSupportedWrap">
 			<h2 id="notSupportedTitle">This content requires JavaScript</h2>
 			<p class="notSupportedMessage">JavaScript appears to be disabled. Please enable it to view this content.</p>
 		</div>
 	</noscript>
-	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@25f6152ab54ec5409c832c904ed3e5e482600d6a/boxcheck.js"></script>
-	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@25f6152ab54ec5409c832c904ed3e5e482600d6a/boxclient.js" type="module"></script>
-	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@25f6152ab54ec5409c832c904ed3e5e482600d6a/boxmain.js" type="module"></script>
+	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@main/boxcheck.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@main/boxclient.js" type="module"></script>
+	<script src="https://cdn.jsdelivr.net/gh/bubbls/ruffle@main/boxmain.js" type="module"></script>
 
     <script>
         // Mock common ad and tracking functions to prevent the game from hanging

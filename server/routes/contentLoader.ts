@@ -1,6 +1,11 @@
 import { Router, Request, Response } from "express";
+import { Readable } from "stream";
 
 const router = Router();
+
+const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+const FORWARDED_HEADERS = ['content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
 
 // MIME type lookup helper
 function getMimeType(urlPath: string, headerType: string | null): string {
@@ -32,85 +37,113 @@ function getMimeType(urlPath: string, headerType: string | null): string {
   return 'text/html; charset=utf-8';
 }
 
-async function handleContentLoad(targetUrl: string, res: Response) {
-  let url = targetUrl.trim();
-
-  // If URL targets blocked jsdelivr user (e.g. genizy), map directly to raw.githubusercontent.com
-  const genizyMatch = url.match(/https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/genizy\/([^/@]+)(?:@([^\/]+))?\/(.*)/i);
+/** jsdelivr refuses some repositories outright; GitHub raw still has them. */
+function mapBlockedRepository(url: string): string {
+  const genizyMatch = url.match(/https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/genizy\/([^/@]+)(?:@([^/]+))?\/(.*)/i);
   if (genizyMatch) {
     const repo = genizyMatch[1];
     const branch = genizyMatch[2] && genizyMatch[2] !== 'latest' ? genizyMatch[2] : 'main';
-    const filePath = genizyMatch[3];
-    url = `https://raw.githubusercontent.com/genizy/${repo}/${branch}/${filePath}`;
+    return `https://raw.githubusercontent.com/genizy/${repo}/${branch}/${genizyMatch[3]}`;
   }
+  return url;
+}
 
-  const fetchWithFallback = async (currentUrl: string): Promise<{ response: globalThis.Response; finalUrl: string } | null> => {
-    try {
-      const resp = await fetch(currentUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        }
-      });
-      
-      // If jsdelivr returned 403 (blocked repo/package size), attempt fallback to GitHub raw
-      if (resp.status === 403 && currentUrl.includes('jsdelivr.net/gh/')) {
-        const ghMatch = currentUrl.match(/https?:\/\/[^\/]+\.jsdelivr\.net\/gh\/([^/@]+)\/([^/@]+)(?:@([^\/]+))?\/(.*)/i);
-        if (ghMatch) {
-          const owner = ghMatch[1];
-          const repo = ghMatch[2];
-          const branch = ghMatch[3] && ghMatch[3] !== 'latest' ? ghMatch[3] : 'main';
-          const rest = ghMatch[4];
-          const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${rest}`;
-          const rawResp = await fetch(rawUrl, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-          });
-          if (rawResp.ok) {
-            return { response: rawResp, finalUrl: rawUrl };
-          }
-        }
-      }
+async function fetchUpstream(url: string, range?: string): Promise<globalThis.Response> {
+  // `identity` matters: Node's fetch decompresses gzip bodies but keeps the
+  // compressed Content-Length header, so forwarding that header would cut the
+  // stream short. Plain bytes make the length we forward truthful.
+  const headers: Record<string, string> = { "User-Agent": BROWSER_UA, "Accept-Encoding": "identity" };
+  if (range) headers.Range = range;
+  return fetch(url, { headers });
+}
 
-      // If GitHub raw returned 404 with main branch, try master branch
-      if (resp.status === 404 && currentUrl.includes('raw.githubusercontent.com/') && currentUrl.includes('/main/')) {
-        const masterUrl = currentUrl.replace('/main/', '/master/');
-        const masterResp = await fetch(masterUrl, {
-          headers: {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-          }
-        });
-        if (masterResp.ok) {
-          return { response: masterResp, finalUrl: masterUrl };
+async function fetchWithFallback(
+  targetUrl: string,
+  range?: string
+): Promise<{ response: globalThis.Response; finalUrl: string } | null> {
+  try {
+    const url = mapBlockedRepository(targetUrl);
+    const resp = await fetchUpstream(url, range);
+
+    // jsdelivr 403s on repos it refuses to serve: retry from GitHub raw.
+    if (resp.status === 403 && url.includes('jsdelivr.net/gh/')) {
+      const ghMatch = url.match(/https?:\/\/[^/]+\.jsdelivr\.net\/gh\/([^/@]+)\/([^/@]+)(?:@([^/]+))?\/(.*)/i);
+      if (ghMatch) {
+        const [, owner, repo, branch, rest] = ghMatch;
+        const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${branch && branch !== 'latest' ? branch : 'main'}/${rest}`;
+        const rawResp = await fetchUpstream(rawUrl, range);
+        if (rawResp.ok || rawResp.status === 206) {
+          return { response: rawResp, finalUrl: rawUrl };
         }
       }
-
-      return { response: resp, finalUrl: currentUrl };
-    } catch (e) {
-      return null;
     }
-  };
 
-  const result = await fetchWithFallback(url);
-  if (!result || !result.response.ok) {
-    const status = result?.response?.status || 502;
-    const statusText = result?.response?.statusText || "Fetch failed";
-    return res.status(status).send(`Failed to fetch remote asset: ${statusText}`);
+    // A repo that renamed its default branch from main to master.
+    if (resp.status === 404 && url.includes('raw.githubusercontent.com/') && url.includes('/main/')) {
+      const masterUrl = url.replace('/main/', '/master/');
+      const masterResp = await fetchUpstream(masterUrl, range);
+      if (masterResp.ok || masterResp.status === 206) {
+        return { response: masterResp, finalUrl: masterUrl };
+      }
+    }
+
+    return { response: resp, finalUrl: url };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function handleContentLoad(targetUrl: string, req: Request, res: Response) {
+  const range = typeof req.headers.range === 'string' ? req.headers.range : undefined;
+  const result = await fetchWithFallback(targetUrl.trim(), range);
+
+  if (!result) {
+    return res.status(502).send("Fetch failed");
   }
 
   const { response, finalUrl } = result;
-  const contentType = getMimeType(finalUrl, response.headers.get('content-type'));
+  const isPartial = response.status === 206;
 
-  res.setHeader('Content-Type', contentType);
+  if (!response.ok && !isPartial) {
+    return res.status(response.status).send(`Failed to fetch remote asset: ${response.statusText || response.status}`);
+  }
+
+  res.status(response.status);
+  res.setHeader('Content-Type', getMimeType(finalUrl, response.headers.get('content-type')));
+  // A server that ignores `identity` hands us an encoded body: its length and
+  // range headers describe the encoded bytes, so they cannot be forwarded.
+  const encoded = response.headers.get('content-encoding');
+  const canDescribeBody = !encoded || encoded === 'identity';
+  if (canDescribeBody) {
+    for (const header of FORWARDED_HEADERS) {
+      const value = response.headers.get(header);
+      if (value) res.setHeader(header, value);
+    }
+  } else {
+    const range_ = response.headers.get('content-range');
+    if (range_) res.setHeader('Content-Range', range_);
+    res.setHeader('Content-Encoding', encoded!);
+  }
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
   res.removeHeader('X-Frame-Options');
   res.removeHeader('Content-Security-Policy');
-  res.setHeader('Cache-Control', 'public, max-age=86400');
+  // `no-transform` keeps the compression middleware out of the way: rewriting
+  // the body would break the byte ranges games rely on to resume big assets.
+  res.setHeader('Cache-Control', 'public, max-age=3600, no-transform');
 
-  const arrayBuffer = await response.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
-  res.send(buffer);
+  if (!response.body) {
+    return res.end();
+  }
+
+  // Stream instead of buffering: some of these assets are tens of megabytes
+  // (Godot .pck/.wasm, Unity .data) and used to be held entirely in memory
+  // before the first byte was sent.
+  const stream = Readable.fromWeb(response.body as any);
+  res.on('close', () => stream.destroy());
+  stream.on('error', () => res.destroy());
+  stream.pipe(res);
 }
 
 // Server-side content loader for query format: /api/content-loader?url=...
@@ -125,10 +158,12 @@ router.get("/content-loader", async (req: Request, res: Response) => {
       return res.status(400).send("Invalid URL protocol");
     }
 
-    await handleContentLoad(url, res);
+    await handleContentLoad(url, req, res);
   } catch (err: any) {
     console.error("Content loader query error:", err);
-    res.status(500).send(err.message || "Failed to fetch URL");
+    if (!res.headersSent) {
+      res.status(500).send(err.message || "Failed to fetch URL");
+    }
   }
 });
 
@@ -149,10 +184,12 @@ router.get("/content-loader/*", async (req: Request, res: Response) => {
       url = 'https://' + url;
     }
 
-    await handleContentLoad(url, res);
+    await handleContentLoad(url, req, res);
   } catch (err: any) {
     console.error("Content loader path error:", err);
-    res.status(500).send(err.message || "Failed to fetch URL path");
+    if (!res.headersSent) {
+      res.status(500).send(err.message || "Failed to fetch URL path");
+    }
   }
 });
 

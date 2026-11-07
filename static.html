@@ -338,7 +338,7 @@
       z-index: 10 !important;
     }
 
-    #game-player-view, #credits-modal, #warning-modal {
+    #game-player-view, #credits-modal {
       position: fixed !important;
       z-index: 9000 !important;
     }
@@ -998,27 +998,6 @@
     </div>
   </div>
 
-  <div id="warning-modal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm p-4 flex items-center justify-center hidden">
-    <div class="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-6 max-w-md w-full shadow-2xl flex flex-col items-center text-center gap-4">
-      <div class="w-12 h-12 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center border border-red-500/20">
-        <i data-lucide="alert-triangle" class="w-6 h-6"></i>
-      </div>
-      
-      <h2 class="text-xl font-bold text-white select-none">Notice</h2>
-      <p class="text-sm text-zinc-400 leading-relaxed">
-        These aren't hosted on my site, some games here might not work. And there might be ads.
-      </p>
-      
-      <div class="flex gap-3 w-full mt-2">
-        <button id="warning-cancel-btn" class="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl font-medium transition-all text-sm">
-          Cancel
-        </button>
-        <button id="warning-confirm-btn" class="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold transition-all text-sm">
-          I Understand
-        </button>
-      </div>
-    </div>
-  </div>
 
   <script>
   function initApp() {
@@ -1032,7 +1011,6 @@
     let filteredGames = [];
     let visibleCount = 100;
     let activeCategories = [];
-    let currentNoticeCallback = null;
 
     const homeView = document.getElementById("home-view");
     const collectionView = document.getElementById("collection-view");
@@ -1064,9 +1042,6 @@
     const creditsCloseBtn = document.getElementById("credits-close-btn");
     const creditsFooterCloseBtn = document.getElementById("credits-footer-close-btn");
 
-    const warningModal = document.getElementById("warning-modal");
-    const warningCancelBtn = document.getElementById("warning-cancel-btn");
-    const warningConfirmBtn = document.getElementById("warning-confirm-btn");
 
     const collectionsGrid = document.getElementById("collections-grid");
     const headerLogoContainer = document.getElementById("header-logo-container");
@@ -2309,23 +2284,6 @@
         closeGamePlayer();
       } catch(err) {}
     };
-
-    if (warningCancelBtn) {
-      warningCancelBtn.addEventListener("click", () => {
-        if (warningModal) warningModal.classList.add("hidden");
-        currentNoticeCallback = null;
-      });
-    }
-
-    if (warningConfirmBtn) {
-      warningConfirmBtn.addEventListener("click", () => {
-        if (warningModal) warningModal.classList.add("hidden");
-        if (currentNoticeCallback) {
-          currentNoticeCallback();
-          currentNoticeCallback = null;
-        }
-      });
-    }
 
     if (collectionsGrid) {
       collectionsGrid.addEventListener("click", (e) => {

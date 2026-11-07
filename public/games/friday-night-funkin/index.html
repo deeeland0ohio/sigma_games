@@ -1,15 +1,55 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html lang="en">
 <head>
-	<base href="https://cdn.jsdelivr.net/gh/genizy/fridayfunk@09fdd5f1fa4ddb304dff7bae6f6af49eda664e8f/">
-	<meta charset="utf-8">
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+	<base href="https://cdn.jsdelivr.net/gh/Entraptadoeztechnology/fridayfunk@09fdd5f1fa4ddb304dff7bae6f6af49eda664e8f/">
 	
-	<title>Friday Night Funkin'</title>
 	
-	<meta id="viewport" name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-	<meta name="apple-mobile-web-app-capable" content="yes">
+	
 	
 	<link rel="shortcut icon" type="image/png" href="favicon.png">
+	
 	
 	<script type="text/javascript" src="Funkin.js"></script>
 	
@@ -204,13 +244,21 @@
 			font-weight: normal;
 			font-style: normal;
 		}
-	</style>
+
+	
+</style>
+	
 </head>
 <body>
+	
 	<noscript>This webpage makes extensive use of JavaScript. Please enable JavaScript in your web browser to view this page.</noscript>
+	
 	<div id="openfl-content"></div>
+	
 	<script type="text/javascript">
 		lime.embed ("Funkin", "openfl-content", 1280, 720, { parameters: {} });
 	</script>
+	
+
 </body>
 </html>

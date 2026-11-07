@@ -1,31 +1,72 @@
-<!DOCTYPE html>
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!DOCTYPE html>
 <html lang="en-us">
+
 <head>
-	<base href="https://cdn.jsdelivr.net/gh/Pixelsuft/hl@main/">
-	<meta charset="utf-8">
-	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+<base href="https://cdn.jsdelivr.net/gh/Pixelsuft/hl@main/">
 	<link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-	<meta name="MobileOptimized" content="640" />
-	<meta name="HandheldFriendly" content="true" />
-	<title>Half-Life: Opposing Force</title>
 	<script>
 		document.addEventListener('contextmenu', event => event.preventDefault());
 		window.onbeforeunload = function(e) {
+			// Cancel the event
 			e.preventDefault();
+
+			// Chrome requires returnValue to be set
 			e.returnValue = 'Really want to quit the game?';
 		};
 
+		//Prevent Ctrl+S (and Ctrl+W for old browsers and Edge)
 		document.onkeydown = function(e) {
-			e = e || window.event;
+			e = e || window.event; //Get event
 
 			if (!e.ctrlKey) return;
 
-			var code = e.which || e.keyCode;
+			var code = e.which || e.keyCode; //Get key code
 
 			switch (code) {
-				case 83:
-				case 87:
+				case 83: //Block Ctrl+S
+				case 87: //Block Ctrl+W -- Not work in Chrome and new Firefox
 					e.preventDefault();
 					e.stopPropagation();
 					break;
@@ -63,6 +104,7 @@
 
 		div.emscripten_border {}
 
+		/* the canvas *must not* have any border or padding, or mouse coords will be wrong */
 		canvas.emscripten {
 			border: 0px none;
 			background-image: url(xd.png);
@@ -136,6 +178,7 @@
 			border-color: #f0B418;
 		}
 
+
 		.loader {
 			border: 4px solid #f3f3f3;
 			border-radius: 50%;
@@ -143,9 +186,11 @@
 			width: 16px;
 			height: 16px;
 			-webkit-animation: spin 2s linear infinite;
+			/* Safari */
 			animation: spin 2s linear infinite;
 		}
 
+		/* Safari */
 		@-webkit-keyframes spin {
 			0% {
 				-webkit-transform: rotate(0deg);
@@ -165,6 +210,8 @@
 				transform: rotate(360deg);
 			}
 		}
+
+
 
 		a.glow,
 		a.glow:hover,
@@ -238,7 +285,12 @@
 		if (document.createElement("detect").style.textShadow==="") {
 			document.getElementsByTagName("html")[0].className+=" textshadow";
 		}
-	</style>
+	
+
+
+
+
+</style>
 </head>
 
 <body onerror=alert(event); bgcolor=#555555 text=#F0B418 link=#ffa600 vlink=#ffa600>
@@ -320,6 +372,7 @@
 		var isSyncing = false;
 
 
+		// make BrowserFS to work on ES5 browsers
 		if (!ArrayBuffer['isView']) {
 			ArrayBuffer.isView = function(a) {
 				return a !== null && typeof(a) === "object" && a['buffer'] instanceof ArrayBuffer;
@@ -343,6 +396,7 @@
 					}
 					select.style.display = 'block';
 					document.getElementById('linksPlaceholder').innerHTML += links;
+					//showElement('linksPlaceholder', true);
 				}
 			} else
 				document.getElementById('rZip').checked = false;
@@ -354,6 +408,7 @@
 				if (len > 1) {
 					for (var i = 0; i < len; i++)
 						select.options[i] = new Option(pkgMods[i][1], pkgMods[i][0]);
+					//select.style.display = 'block';
 				}
 			} else
 				document.getElementById('rPackage').checked = false;
@@ -373,9 +428,15 @@
 			postRun: [],
 			print: (function() {
 				var element = document.getElementById('output');
-				if (element) element.value = '';
+				if (element) element.value = ''; // clear browser cache
 				return function(text) {
 					if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+					// These replacements are necessary if you render to raw HTML
+					//text = text.replace(/&/g, "&amp;");
+					//text = text.replace(/</g, "&lt;");
+					//text = text.replace(/>/g, "&gt;");
+					//text = text.replace('\n', '<br>', 'g');
+					//console.log(text);
 					if (text) {
 						myerrorbuf += text + '\n';
 						console.log(text);
@@ -398,15 +459,15 @@
 							element.value = element.value.substring(512) + myerrorbuf;
 						else
 							element.value += myerrorbuf;
-						element.scrollTop = element.scrollHeight;
+						element.scrollTop = element.scrollHeight; // focus on bottom
 					}
 					myerrorbuf = ''
 				};
 			})(),
 			printErr: function(text) {
 				if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-				if (0) {
-					dump(text + '\n');
+				if (0) { // XXX disabled for safety typeof dump == 'function') {
+					dump(text + '\n'); // fast, straight to the real console
 				} else {
 					if (myerrorbuf.length > 2048)
 						myerrorbuf = 'some lines skipped\n' + myerrorbuf.substring(512);
@@ -420,6 +481,9 @@
 			canvas: (function() {
 				var canvas = document.getElementById('canvas');
 
+				// As a default initial behavior, pop up an alert when webgl context is lost. To make your
+				// application robust, you may want to override this behavior before shipping!
+				// See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
 				canvas.addEventListener("webglcontextlost", function(e) {
 					alert('WebGL context lost. You will need to reload the page.');
 					e.preventDefault();
@@ -501,17 +565,20 @@
 			showElement('fSettings', false);
 			Module.arguments = document.getElementById('iArgs').value.split(' ');
 			
+			// Create a callback that will run the game AFTER everything is ready
 			var runGameCallback = function() {
 				Module.print("All filesystems ready, starting game...");
 				Module.run = run = savedRun;
 				savedRun();
 			};
 			
+			// Callback after ZIP is mounted
 			var afterZipMounted = function() {
 				Module.print("ZIP mounted successfully");
 				runGameCallback();
 			};
 			
+			// Setup filesystem and wait for it to be ready before loading ZIP
 			setupFS(function() {
 				Module.print("Base filesystem ready");
 				
@@ -548,8 +615,8 @@
 			window.addEventListener("beforeunload", function(e) {
 				var confirmationMessage = 'Leave the game?';
 
-				(e || window.event).returnValue = confirmationMessage;
-				return confirmationMessage;
+				(e || window.event).returnValue = confirmationMessage; //Gecko + IE
+				return confirmationMessage; //Gecko + Webkit, Safari, Chrome etc.
 			});
 		}
 
@@ -587,7 +654,7 @@
 					throw new Error("NetworkError");
 				}
 				xhr.onload = function(event) {
-					if (xhr.status == 200 || xhr.status == 304 || xhr.status == 206 || (xhr.status == 0 && xhr.response)) {
+					if (xhr.status == 200 || xhr.status == 304 || xhr.status == 206 || (xhr.status == 0 && xhr.response)) { // file URLs can return 0
 						mountZIP(xhr.response);
 						cb();
 					} else {
@@ -619,7 +686,7 @@
 						throw new Error("NetworkError");
 					}
 					xhr.onload = function(event) {
-						if (xhr.status == 200 || xhr.status == 304 || xhr.status == 206 || (xhr.status == 0 && xhr.response)) {
+						if (xhr.status == 200 || xhr.status == 304 || xhr.status == 206 || (xhr.status == 0 && xhr.response)) { // file URLs can return 0
 							finished++;
 							buffers.set(new Uint8Array(xhr.response), cur * size_of_parts);
 							if (finished == parts) {
@@ -705,6 +772,7 @@
 
 		Module.preInit = [skipRun];
 		Module.websocket = [];
+		//Module.websocket.url = 'wsproxy://the-swank.pp.ua:3000/'
 		Module.websocket.url = 'wsproxy://4.tcp.ngrok.io:10657/';
 		ENV = [];
 	</script>
@@ -733,6 +801,16 @@
 			else document.getElementById('output').style.display = "none";
 		});
 		document.getElementById('label_show_console_log').style.display = "inline-block";
+		/*(function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+		(i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+		m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+		})(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+		ga('create', 'UA-68666752-4', 'auto');
+		ga('send', 'pageview');*/
 	</script>
+
+
 </body>
+
 </html>

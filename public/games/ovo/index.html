@@ -1,8 +1,46 @@
-<!doctype html>
 <html><head>
-  <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-  <title>OvO</title>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script>
 <script>
 (function() {
     const originalFetch = window.fetch;
@@ -19,10 +57,6 @@
 
   <base href="https://cdn.jsdelivr.net/gh/Replku/Ovo@2b17271c24535b96a49c4d1b9f64cd998aa2d060/">
   <link rel="manifest" href="appmanifest.json">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, minimal-ui">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="HandheldFriendly" content="true">
   <style>
     *{padding:0;margin:0}
     html,body{background:#000;color:#fff;overflow:hidden;touch-action:none;-ms-touch-action:none}
@@ -52,6 +86,8 @@
   }
 }</style><style>.animated,animated.hinge,.animated.flipOutX,.animated.flipOutY,.animated.bounceIn,.animated.bounceOut,.animated.flipOutXX,.animated.flipInXX,.animated.flipInYY,.animated.flipOutYY{-webkit-animation-duration: 0.7s !important;animation-duration: 0.7s !important;}</style><script type="text/javascript" src="lzma.js"></script><script type="text/javascript" src="unlockalllevels.js"></script><script type="text/javascript" src="websdkwrapper.js"></script><script type="text/javascript" src="ovo-level-editor.js"></script><link rel="stylesheet" type="text/css" href="style.css"><link href="fonts.css" rel="stylesheet" type="text/css"><link href="./fonts.css" rel="stylesheet" type="text/css"><link href="./fonts.css" rel="stylesheet" type="text/css"></head>
 <body>
+  
+
   <script>
     (function(){
       var m=['log','info','debug','warn','error','trace','group','groupCollapsed','groupEnd','time','timeEnd','table','assert'];
@@ -98,6 +134,7 @@
   </script>
 
   <script src="jquery-3.4.1.min.js" crossorigin="anonymous"></script>
+  <script src="GameAnalytics.js" crossorigin="anonymous"></script>
   <script src="Tween.js" crossorigin="anonymous"></script>
   <script src="html2canvas.min.js" crossorigin="anonymous"></script>
   <script src="jquery.gritter.js" crossorigin="anonymous"></script>

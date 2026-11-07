@@ -1,16 +1,87 @@
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-L7856P3VNT"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-L7856P3VNT');
+</script><!-- Ultimate Game Stash file--> 
+<!-- For the regularly updating doc go to https://docs.google.com/document/d/1_FmH3BlSBQI7FGgAQL59-ZPe8eCxs35wel6JUyVaG8Q/ -->
+
 <!DOCTYPE html>
 <html lang="en-us">
 
 <head>
-  <base href="https://cdn.jsdelivr.net/gh/bubbls/youtube-playables@c5eefc5c13316b94c58e63cb5270b99a13c88fea/solar-smash/">
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+  <base href="https://cdn.jsdelivr.net/gh/bubbls/youtube-playables@main/solar-smash/">
 
-  <title>YT Game Wrapper WebGL Template</title>
   <link rel="stylesheet" href="TemplateData/style.css" nonce="we8ZPMAc10sjbMeA8f_pRw">
-  <script src="https://cdn.jsdelivr.net/gh/bubbls/youtube-playables@main/ytgame.js" nonce="we8ZPMAc10sjbMeA8f_pRw">// Load YT Game API code</script>
+  <script nonce="we8ZPMAc10sjbMeA8f_pRw">
+if (!window.ytgame) {
+  window.ytgame = {
+    SDK_VERSION: "standalone",
+    IN_PLAYABLES_ENV: false,
+    SdkError: function (t) { this.errorType = t; this.message = ""; },
+    SdkErrorType: { UNDEFINED: 0, GAMEAPI_UNDEFINED: 1 },
+    game: {
+      firstFrameReady: function () {},
+      gameReady: function () {},
+      loadData: function () { return Promise.resolve(localStorage.getItem("solar-smash-save") || ""); },
+      saveData: function (data) { localStorage.setItem("solar-smash-save", data); return Promise.resolve(); }
+    },
+    engagement: { sendScore: function () { return Promise.resolve(); } },
+    ads: {
+      requestAd: function () { return Promise.resolve(3); },
+      requestInterstitialAd: function () { return Promise.resolve(); },
+      AdResult: { UNKNOWN: 0, SHOWED: 1, REJECTED: 3, DISMISSED: 2 }
+    },
+    health: { logError: function () {}, logWarning: function () {} },
+    system: {
+      getLanguage: function () { return Promise.resolve("en"); },
+      isAudioEnabled: function () { return true; },
+      onAudioEnabledChange: function () { return function () {}; },
+      onPause: function () { return function () {}; },
+      onResume: function () { return function () {}; }
+    }
+  };
+  window.ytgamehelper = { myConsoleLog: function () {} };
+}
+</script>
+
 </head>
 
 <body>
@@ -319,7 +390,7 @@ Unarchiver.loadedFormats = {};
     const subDataStr = '.data';
     
     // loadResources is only used if you need load Zipped files for .wasm, or .data and need 
-    // them to be decompressed. If the file is not zipped we skip decompression step automatically,
+    // them to be decompressed. If the file is not zipped we bypass decompression step automatically,
     // however its best to not trigger this if you dont used compression. 
     // NOTE: GZip does not work ATM.  If this is needed Unarchiver will need to be updated.
     loadResources = (callback) => {
@@ -467,5 +538,6 @@ window.fetch = function(input, options) {
     // if you dont use compresseion its best to comment out Path 1 and uncomment Path 2.
      loadResources(InitUnitySection);  // Uncomment this line to start Unity by loading zipped files
   </script>
+
 </body>
 </html>

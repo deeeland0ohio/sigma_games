@@ -1,208 +1,156 @@
-<!DOCTYPE html>
-<html lang="en-us">
-  <head>
-    <base href="https://cdn.jsdelivr.net/gh/bubbls/UGS-Assets@main/slope%203/">
-    <meta charset="utf-8">
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Slope 3</title>
+<!doctype html>
+<html lang="en">
+<head>
+<script>
+(function() {
+  try {
+    window.alert = function() {};
+    window.confirm = function() { return false; };
+    window.prompt = function() { return null; };
+    try { window.open = function() { return null; }; } catch (e) {}
+    window.onbeforeunload = null;
+  } catch (e) {}
+})();
+</script>
+<script>
+(function() {
+  var mem = {};
+  var sessionMem = {};
+  function make(store) {
+    return {
+      getItem: function(k) { return Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null; },
+      setItem: function(k, v) { store[k] = String(v); },
+      removeItem: function(k) { delete store[k]; },
+      clear: function() { for (var k in store) delete store[k]; },
+      key: function(i) { return Object.keys(store)[i] || null; },
+      get length() { return Object.keys(store).length; }
+    };
+  }
+  try {
+    window.localStorage.getItem('__probe__');
+  } catch (e) {
+    try {
+      Object.defineProperty(window, 'localStorage', { value: make(mem), configurable: true, writable: true });
+      Object.defineProperty(window, 'sessionStorage', { value: make(sessionMem), configurable: true, writable: true });
+    } catch (err) {}
+  }
+})();
+</script>
+<base href="https://cdn.jsdelivr.net/gh/WanoCapy/ChickenKingsVault@main/gamefiles/">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-LM67KGEJRK"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
 
-    <style>
-        html, body {
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background-color: #000;
+  gtag('config', 'G-LM67KGEJRK');
+</script>
+
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>University of Adelaide</title>
+        <style>
+        :root {
+            --bg: #0b0b0d;
+            --surface: #141417;
+            --surface-alt: #1d1d21;
+            --accent: #f5a623;
+            --accent-fg: #000;
+            --text: #e2e2e6;
+            --text-muted: #7a7a82;
+            --border: rgba(255, 255, 255, 0.07);
+            --radius: 10px;
+            --radius-sm: 6px;
         }
-        .webgl-content {
-            width: 100% !important;
-            height: 100% !important;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-        }
-        #gameContainer {
-            width: 100% !important;
-            height: 100% !important;
-            flex-grow: 1;
-        }
-        .footer {
-            /* Keep footer hidden or minimal */
-            height: 5%;
-            width: 100%;
-            display: none; 
-        }
+        html,body { height:100%; margin:0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); }
+        .toolbar { display:flex; gap:.5rem; padding:.5rem; background: rgba(11, 11, 13, 0.88); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-bottom: 1px solid var(--border); color: var(--text); align-items:center; }
+        button { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-muted); padding: 5px 13px; font-size: 13px; transition: color 0.12s, border-color 0.12s, background 0.12s; cursor:pointer; line-height: 1; }
+        button:hover { color: var(--text); border-color: rgba(255, 255, 255, 0.18); }
+        button:active { transform:translateY(1px); }
+        .frame-wrapper { height: calc(100% - 56px); background: var(--bg); display:flex; }
+        iframe { border:0; width:100%; height:100%; display:block; }
     </style>
+</head>
+<body>
+    <div class="toolbar">
+        <span>Slope 3</span>
+        <button id="homeBtn">Home</button>
+        <div style="flex:1"></div>
+        <button id="fsBtn">Enter fullscreen</button>
+    </div>
+
+    <div class="frame-wrapper" id="frameWrapper">
+        <iframe id="gameFrame" src="Slope 3.html" allowfullscreen allow="fullscreen"></iframe>
+    </div>
 
     <script>
-      window.fileMergerConfig = {
-        files: [
-          // Assuming the data file referenced in build.json is called 'build.data' or similar.
-          // You must confirm the exact name of the data file that was split.
-          { name: 'Slope3.data.unityweb', parts: 2 } 
-        ],
-        // All these files are likely in the root, where build.json is.
-        basePath: '', 
-        debug: true
-      };
-    </script>
+        const fsBtn = document.getElementById('fsBtn');
+        const wrapper = document.getElementById('frameWrapper');
+        const iframe = document.getElementById('gameFrame');
+        const homeBtn = document.getElementById('homeBtn');
 
-    <script>
-    (function() {
-      'use strict';
-      const config = Object.assign({files: [], basePath: '', debug: true}, window.fileMergerConfig || {});
-      window.mergedFiles = window.mergedFiles || {};
-      const mergeStatus = {};
-
-      function log(...args) { if (config.debug) console.log('[FileMerger]', ...args); }
-      function error(...args) { console.error('[FileMerger]', ...args); }
-      function normalizeUrl(url) { try { return decodeURIComponent(url.toString().split('?')[0]); } catch (e) { return url; } }
-      function urlsMatch(url1, url2) {
-        const n1 = normalizeUrl(url1), n2 = normalizeUrl(url2);
-        // Special case for Unity 2018 and older: they append a hash to the data file.
-        // We only check for the base name.
-        const name1 = n1.split('/').pop().split('?')[0];
-        const name2 = n2.split('/').pop().split('?')[0];
-
-        for (const f of config.files) {
-            if (name1.startsWith(f.name) && name1.length >= f.name.length) return f.name;
-            if (name2.startsWith(f.name) && name2.length >= f.name.length) return f.name;
+        function isFullscreen() {
+            return !!(document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement);
         }
 
-        return null;
-      }
-
-      async function mergeSplitFiles(filePath, partsCount) {
-        try {
-          const parts = [];
-          for (let i = 1; i <= partsCount; i++) parts.push(`${filePath}.part${i}`);
-          log(`Merging ${filePath} from ${partsCount} parts...`);
-          const responses = await Promise.all(parts.map(p => window.originalFetch(p)));
-          for (const r of responses) if (!r.ok) throw new Error(`Part missing: ${r.url} (${r.status})`);
-          const buffers = await Promise.all(responses.map(r => r.arrayBuffer()));
-          const totalLen = buffers.reduce((acc, b) => acc + b.byteLength, 0);
-          const merged = new Uint8Array(totalLen);
-          let offset = 0;
-          for (const b of buffers) { merged.set(new Uint8Array(b), offset); offset += b.byteLength; }
-          log(`✅ Merged: ${filePath} (${(totalLen/1024/1024).toFixed(2)} MB)`);
-          return merged.buffer;
-        } catch (e) { error(e); throw e; }
-      }
-
-      function shouldIntercept(url) {
-        const s = normalizeUrl(url);
-        if (s.includes('.part')) return null;
-
-        const matchedName = urlsMatch(s, s);
-        if (matchedName) return matchedName;
-        
-        return null;
-      }
-
-      function getMerged(name) {
-        if (window.mergedFiles[name]) return window.mergedFiles[name];
-        // Check by partial key, useful for versioned names like `build.data.12345`
-        for (const [k, v] of Object.entries(window.mergedFiles)) {
-             if (k.startsWith(name)) return v;
+        function requestFull(element) {
+            if (element.requestFullscreen) return element.requestFullscreen();
+            if (element.webkitRequestFullscreen) return element.webkitRequestFullscreen();
+            if (element.mozRequestFullScreen) return element.mozRequestFullScreen();
+            if (element.msRequestFullscreen) return element.msRequestFullscreen();
         }
-        return null;
-      }
 
-      if (!window.originalFetch) window.originalFetch = window.fetch;
-      window.fetch = function(url, ...args) {
-        const name = shouldIntercept(url);
-        if (name) {
-          log('Intercepting fetch:', name);
-          return new Promise((resolve, reject) => {
-            const t = setInterval(() => {
-              const b = getMerged(name);
-              if (b) {
-                clearInterval(t);
-                const type = name.endsWith('.wasm') ? 'application/wasm' : 'application/octet-stream';
-                resolve(new Response(b, {status: 200, headers: {'Content-Type': type}}));
-              }
-              else if (mergeStatus[name] === 'failed') { clearInterval(t); reject(new Error('Merge failed')); }
-            }, 50);
-          });
+        function exitFull() {
+            if (document.exitFullscreen) return document.exitFullscreen();
+            if (document.webkitExitFullscreen) return document.webkitExitFullscreen();
+            if (document.mozCancelFullScreen) return document.mozCancelFullScreen();
+            if (document.msExitFullscreen) return document.msExitFullscreen();
         }
-        return window.originalFetch.call(this, url, ...args);
-      }
 
-      if (!window.OriginalXMLHttpRequest) window.OriginalXMLHttpRequest = window.XMLHttpRequest;
-      window.XMLHttpRequest = function(opts) {
-        const xhr = new window.OriginalXMLHttpRequest(opts);
-        const open = xhr.open;
-        xhr.open = function(m, u, ...a) { this._url = u; return open.call(this, m, u, ...a); };
-        xhr.send = function(...a) {
-          const name = shouldIntercept(this._url);
-          if (name) {
-            log('Intercepting XHR:', name);
-            const t = setInterval(() => {
-              const b = getMerged(name);
-              if (b) {
-                clearInterval(t);
-                Object.defineProperties(xhr, { status: {value: 200}, response: {value: b}, readyState: {value: 4} });
-                if (xhr.onload) xhr.onload({type: 'load', target: xhr});
-              }
-            }, 50);
-            return;
-          }
-          return window.OriginalXMLHttpRequest.prototype.send.apply(this, a);
-        }
-        return xhr;
-      }
-
-      async function start() {
-        config.files.forEach(f => {
-           const path = config.basePath + f.name;
-           mergeStatus[f.name] = 'merging';
-           mergeSplitFiles(path, f.parts).then(b => {
-             // Store the buffer using the name of the file being requested by Unity
-             window.mergedFiles[f.name] = b; 
-             // Also store it using the full path, just in case
-             window.mergedFiles[path] = b;
-             mergeStatus[f.name] = 'ready';
-           }).catch(() => mergeStatus[f.name] = 'failed');
-        });
-      }
-      start();
-    })();
-    </script>
-
-
-    <script src="UnityLoader.js"></script>
-    <script src="UnityProgress.js"></script>
-    
-    <script>
-        var gameInstance = UnityLoader.instantiate("gameContainer", "build.json", {
-            onProgress: UnityProgress,
-            Module: {
-                onRuntimeInitialized: function() {
-                    UnityProgress(gameInstance, "complete")
+        fsBtn.addEventListener('click', async () => {
+            try {
+                if (!isFullscreen()) {
+                    // Many browsers don't allow making a cross-origin iframe the fullscreen root,
+                    // so request fullscreen on the wrapper element instead.
+                    await requestFull(wrapper);
+                    fsBtn.textContent = 'Exit fullscreen';
+                } else {
+                    await exitFull();
+                    fsBtn.textContent = 'Enter fullscreen';
                 }
+            } catch (e) {
+                console.error('Fullscreen request failed', e);
             }
         });
-    </script>
-  </head>
 
-  <body>
-    <div class="webgl-content">
-        <div id="gameContainer" style="width: 100%; height: 100%; margin: auto;"></div>
-        <div class="footer"></div>
-        
-        <script>
-            function UnityCallJs() { console.log("unity call!"); }
-            function UnityCallPlayJs() { console.log("untiy call Play game"); }
-            function UnityCallLeaderboardJs() { console.log("untiy call On Leaderboard"); }
-            function UnityCallAgainJs() { console.log("unity call Again"); }
-            function UnityCallEndgameJs() { console.log("untiy call end game"); }
-            function UnityCallBackHomeJs() { console.log("untiy call backHome"); }
-            function UnityCallChangeDayLeaderboardJs() { console.log("untiy call change day leaderboard"); }
-            function UnityCallCloseLeaderboardJs() { console.log("untiy call close leaderboard"); }
-        </script>
-    </div>
-  </body>
+        // Home button navigates to index.html
+        homeBtn.addEventListener('click', () => {
+            window.location.href = 'index.html';
+        });
+
+        // Update button text if user exits fullscreen via ESC or browser UI
+        document.addEventListener('fullscreenchange', () => {
+            fsBtn.textContent = isFullscreen() ? 'Exit fullscreen' : 'Enter fullscreen';
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            fsBtn.textContent = isFullscreen() ? 'Exit fullscreen' : 'Enter fullscreen';
+        });
+        document.addEventListener('mozfullscreenchange', () => {
+            fsBtn.textContent = isFullscreen() ? 'Exit fullscreen' : 'Enter fullscreen';
+        });
+        document.addEventListener('MSFullscreenChange', () => {
+            fsBtn.textContent = isFullscreen() ? 'Exit fullscreen' : 'Enter fullscreen';
+        });
+    </script>
+</body>
 </html>
+
+
+
+
+
+
+
+
+
