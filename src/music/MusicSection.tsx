@@ -23,7 +23,8 @@ import {
   BadgeCheck,
   Radio,
   Zap,
-  Headphones
+  Headphones,
+  Wrench
 } from 'lucide-react';
 
 export const SEARCH_PLACEHOLDER_TEXT = "Search any song, artist, album, or genre";
@@ -105,6 +106,7 @@ export default function MusicSection() {
   const [hasMore, setHasMore] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
   const [musicSource, setMusicSource] = useState<MusicSource>('soundcloud');
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
     loadTrendingMusic();
@@ -128,6 +130,7 @@ export default function MusicSection() {
   const loadTrendingMusic = async (source = musicSource) => {
     setIsSearching(true);
     setHasSearched(false);
+    setLoadFailed(false);
     setPage(1);
     try {
       const endpoint = `/api/music/trending?source=${source}&limit=30`;
@@ -144,11 +147,13 @@ export default function MusicSection() {
       const fallbackSongs = await fetchClientBySource(source, '', 1, 30);
       setSearchResults(fallbackSongs);
       setHasMore(fallbackSongs.length >= 30);
+      setLoadFailed(fallbackSongs.length === 0);
     } catch (err) {
       console.warn('Backend trending fetch failed, fallback to client API:', err);
       const fallbackSongs = await fetchClientBySource(source, '', 1, 30);
       setSearchResults(fallbackSongs);
       setHasMore(fallbackSongs.length >= 30);
+      setLoadFailed(fallbackSongs.length === 0);
     } finally {
       setIsSearching(false);
     }
@@ -164,6 +169,7 @@ export default function MusicSection() {
     }
 
     setIsSearching(true);
+    setLoadFailed(false);
     setPage(1);
     setHasMore(true);
     setHasSearched(true);
@@ -185,11 +191,13 @@ export default function MusicSection() {
       const fallbackSongs = await fetchClientBySource(source, query, 1, 30);
       setSearchResults(fallbackSongs);
       setHasMore(fallbackSongs.length >= 30);
+      setLoadFailed(fallbackSongs.length === 0);
     } catch (err) {
       console.warn('Backend search failed, fallback to client API:', err);
       const fallbackSongs = await fetchClientBySource(source, query, 1, 30);
       setSearchResults(fallbackSongs);
       setHasMore(fallbackSongs.length >= 30);
+      setLoadFailed(fallbackSongs.length === 0);
     } finally {
       setIsSearching(false);
     }
@@ -492,7 +500,28 @@ export default function MusicSection() {
           onScroll={handleScroll}
           className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1.5 custom-scrollbar"
         >
-          {searchResults.length === 0 && !isSearching && hasSearched && (
+          {searchResults.length === 0 && !isSearching && loadFailed && (
+            <div className="py-10 text-center max-w-md mx-auto">
+              <div className="p-8 border border-dashed border-zinc-700 rounded-xl bg-zinc-900/50">
+                <Wrench size={48} className="mx-auto text-zinc-600 mb-4" />
+                <h2 className="text-xl font-bold text-white mb-2">
+                  {SOURCES.find((s) => s.id === musicSource)?.name} is under maintenance
+                </h2>
+                <p className="text-zinc-400 text-sm mb-6">
+                  This source isn't answering right now. Try another one, or check back in a bit.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => loadTrendingMusic(musicSource)}
+                  className="px-5 py-2.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl text-sm font-semibold transition-colors cursor-pointer"
+                >
+                  Try again
+                </button>
+              </div>
+            </div>
+          )}
+
+          {searchResults.length === 0 && !isSearching && hasSearched && !loadFailed && (
             <div className="py-16 text-center space-y-2">
               <Music2 size={36} className="mx-auto text-zinc-600" />
               <p className="text-sm font-medium text-zinc-400">No tracks found</p>
