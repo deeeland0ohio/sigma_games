@@ -7,9 +7,9 @@ import { Palette, Monitor, Zap, Bug, Sliders, RefreshCw, Layout, Maximize2, Squa
 import { useNavigate, useLocation } from 'react-router-dom';
 
 export function SettingsContent() {
-  const { 
-    theme, setTheme, 
-    background, setBackground, 
+  const {
+    theme, setTheme,
+    background, setBackground,
     simulationPower, setSimulationPower,
     backgroundConfig, setBackgroundConfig,
     settingsViewMode, setSettingsViewMode,
@@ -245,7 +245,7 @@ export function SettingsContent() {
         </div>,
         document.body
       )}
-      
+
       <div className="flex items-center justify-between border-b border-zinc-800 pb-6 flex-wrap gap-4">
         <div>
           <h1 className="text-4xl font-bold text-white tracking-tight">SYSTEM SETTINGS</h1>
@@ -295,7 +295,6 @@ export function SettingsContent() {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-12">
-        {/* Left Column: Visuals */}
         <div className="space-y-10">
           <section className="space-y-6 min-w-[300px]">
             <div className="flex items-center gap-3 text-zinc-100">
@@ -317,8 +316,8 @@ export function SettingsContent() {
                     else if (prevBg === 'lightspeed' || prevBg === 'black-hole' || prevBg === 'fluid') setTheme('red-green');
                   }}
                   className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                    background === bg.id 
-                      ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg' 
+                    background === bg.id
+                      ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg'
                       : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                   }`}
                 >
@@ -331,11 +330,11 @@ export function SettingsContent() {
                     )}
                   </div>
                   {background === bg.id && (
-                    <div 
+                    <div
                       className={`w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)] ${colors.primaryBg}`}
-                      style={{ 
+                      style={{
                         boxShadow: `0 0 8px ${colors.hexPrimary}`
-                      }} 
+                      }}
                     />
                   )}
                 </button>
@@ -356,8 +355,8 @@ export function SettingsContent() {
                   key={t.id}
                   onClick={() => setTheme(t.id)}
                   className={`flex flex-col gap-3 p-4 rounded-2xl border transition-all ${
-                    theme === t.id 
-                      ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg' 
+                    theme === t.id
+                      ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg'
                       : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                   }`}
                 >
@@ -433,7 +432,6 @@ export function SettingsContent() {
           </section>
         </div>
 
-        {/* Right Column: Precise Controls */}
         <div className="space-y-10">
           {background !== 'blank' && (
             <section className="space-y-6 bg-zinc-900/30 border border-zinc-800/50 p-8 rounded-3xl min-w-[300px]">
@@ -453,8 +451,8 @@ export function SettingsContent() {
                       }
                     }}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                      isAdvanced 
-                        ? 'bg-red-600 text-white shadow-sm ring-1 ring-red-500/50' 
+                      isAdvanced
+                        ? 'bg-red-600 text-white shadow-sm ring-1 ring-red-500/50'
                         : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/60'
                     }`}
                   >
@@ -465,8 +463,8 @@ export function SettingsContent() {
                     type="button"
                     onClick={disableAdvanced}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                      !isAdvanced 
-                        ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-sm' 
+                      !isAdvanced
+                        ? 'bg-zinc-800 text-zinc-100 border border-zinc-700/60 shadow-sm'
                         : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60'
                     }`}
                   >
@@ -474,9 +472,8 @@ export function SettingsContent() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="space-y-8">
-                {/* Global Energy */}
                 {background !== 'custom-image-bg' && (
                   <div className="space-y-4">
                     <div className="flex justify-between items-center">
@@ -494,7 +491,6 @@ export function SettingsContent() {
                   </div>
                 )}
 
-                {/* Background Specific Controls */}
                 {background === 'dots' && (
                   <>
                     <div className="space-y-4">
@@ -989,8 +985,8 @@ export function SettingsContent() {
               <button
                 onClick={() => handleSetViewMode('page')}
                 className={`flex items-center gap-3 p-4 rounded-2xl border transition-all ${
-                  settingsViewMode === 'page' 
-                    ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg' 
+                  settingsViewMode === 'page'
+                    ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg'
                     : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                 }`}
               >
@@ -1000,8 +996,8 @@ export function SettingsContent() {
               <button
                 onClick={() => handleSetViewMode('box')}
                 className={`flex items-center gap-3 p-4 rounded-2xl border transition-all ${
-                  settingsViewMode === 'box' 
-                    ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg' 
+                  settingsViewMode === 'box'
+                    ? 'bg-zinc-800 border-zinc-600 text-white shadow-lg'
                     : 'bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                 }`}
               >
@@ -1028,8 +1024,8 @@ export function SettingsContent() {
                 <button
                   onClick={() => setClosePrevention(true)}
                   className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
-                    closePrevention 
-                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/10 border border-emerald-500' 
+                    closePrevention
+                      ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-600/10 border border-emerald-500'
                       : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                   }`}
                 >
@@ -1039,8 +1035,8 @@ export function SettingsContent() {
                 <button
                   onClick={() => setClosePrevention(false)}
                   className={`flex-1 px-4 py-3 rounded-xl font-medium transition-all flex items-center justify-center gap-2 ${
-                    !closePrevention 
-                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/10 border border-red-500' 
+                    !closePrevention
+                      ? 'bg-red-600 text-white shadow-lg shadow-red-600/10 border border-red-500'
                       : 'bg-zinc-900/50 border border-zinc-800 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
                   }`}
                 >
@@ -1094,7 +1090,7 @@ export function SettingsContent() {
                   ))}
                 </div>
               </div>
-            
+
               <div className="space-y-3">
                 <label className="text-sm font-medium text-zinc-400">Custom Tab Title</label>
                 <input
@@ -1154,7 +1150,6 @@ export function SettingsContent() {
                   <Maximize2 size={18} />
                   Launch in blob:
                 </button>
-
 
               </div>
             </div>

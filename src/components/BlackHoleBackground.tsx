@@ -6,19 +6,19 @@ interface BlackHoleConfig {
   density: number;
 }
 
-export default function BlackHoleBackground({ 
-  color1, 
-  color2, 
-  color3, 
-  color4, 
+export default function BlackHoleBackground({
+  color1,
+  color2,
+  color3,
+  color4,
   palette,
   power = 1.0,
   config = { speed: 50, size: 50, density: 50 }
-}: { 
-  color1: string, 
-  color2: string, 
-  color3?: string, 
-  color4?: string, 
+}: {
+  color1: string,
+  color2: string,
+  color3?: string,
+  color4?: string,
   palette?: string[],
   power?: number,
   config?: BlackHoleConfig
@@ -50,7 +50,7 @@ export default function BlackHoleBackground({
     let width = window.innerWidth;
     let height = window.innerHeight;
     let dpr = window.devicePixelRatio || 1;
-    
+
     canvas.style.width = width + 'px';
     canvas.style.height = height + 'px';
     canvas.width = Math.floor(width * dpr);
@@ -93,24 +93,24 @@ export default function BlackHoleBackground({
     }
 
     let dashes: Dash[] = [];
-    
-    const activePalette = (palette && palette.length > 0) 
-      ? palette 
+
+    const activePalette = (palette && palette.length > 0)
+      ? palette
       : [color1, color2, color3, color4].filter(Boolean) as string[];
 
     const createDash = (xStart?: number, fixedZ?: number): Dash => {
       const color = activePalette[Math.floor(Math.random() * activePalette.length)];
-      
+
       const baseSpeed = (1 + Math.random() * 3);
       const baseLength = (10 + Math.random() * 30);
-      const z = fixedZ ?? (0.15 + Math.random() * 1.05); // depth from 0.15 (far) to 1.20 (near)
-      
+      const z = fixedZ ?? (0.15 + Math.random() * 1.05);
+
       const dashY = Math.random() * height;
       return {
         x: xStart ?? Math.random() * width,
         y: dashY,
         z,
-        vx: baseSpeed * (0.35 + 0.65 * z), // slow down farther background lines for 3D parallax
+        vx: baseSpeed * (0.35 + 0.65 * z),
         vy: 0,
         baseY: dashY,
         baseSpeed,
@@ -128,21 +128,19 @@ export default function BlackHoleBackground({
       for (let i = 0; i < maxDashes; i++) {
         dashes.push(createDash());
       }
-      // Sort dashes by z so they render back-to-front (depth sorted)
+
       dashes.sort((a, b) => a.z - b.z);
     };
 
     initDashesRef.current = initDashes;
     initDashes();
 
-    // Initialize fluid blobs for the accretion disk
     const blobs: FluidBlob[] = [];
-    
+
     const getFluidColor = (c: string) => {
       if (c.includes('rgba')) {
         return c.replace(/0\.\d+\)/, '0.04)');
       } else if (c.startsWith('#')) {
-        // Convert hex to rgba
         const r = parseInt(c.slice(1, 3), 16);
         const g = parseInt(c.slice(3, 5), 16);
         const b = parseInt(c.slice(5, 7), 16);
@@ -152,11 +150,11 @@ export default function BlackHoleBackground({
     };
 
     const fluidPalette = activePalette.map(c => getFluidColor(c));
-    
+
     for (let i = 0; i < 45; i++) {
       blobs.push({
         angle: Math.random() * Math.PI * 2,
-        speed: 0.005 + Math.random() * 0.015, // Base speed, multiplied by power in animate loop
+        speed: 0.005 + Math.random() * 0.015,
         dist: 20 + Math.random() * 50,
         size: 40 + Math.random() * 50,
         color: fluidPalette[Math.floor(Math.random() * fluidPalette.length)],
@@ -168,13 +166,13 @@ export default function BlackHoleBackground({
       width = window.innerWidth;
       height = window.innerHeight;
       dpr = window.devicePixelRatio || 1;
-      
+
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       ctx.scale(dpr, dpr);
-      
+
       initDashes();
     };
     window.addEventListener('resize', handleResize);
@@ -196,19 +194,18 @@ export default function BlackHoleBackground({
     const drawAccretionDisk = (sizeFactor: number, speedFactor: number) => {
       if (mouse.x > -1000 && powerRef.current > 0) {
         const time = Date.now() * 0.001;
-        
+
         ctx.save();
         ctx.globalAlpha = 1.0;
-        // Use screen blending for a bright, fluid light effect
+
         ctx.globalCompositeOperation = 'screen';
 
-        // Intense inner gas glow (1.25x larger)
         const innerGlowRadius = 130 * sizeFactor * 1.25;
         const innerGlow = ctx.createRadialGradient(mouse.x, mouse.y, 35 * sizeFactor * 1.25, mouse.x, mouse.y, innerGlowRadius);
-        
+
         const intenseC1 = getIntenseColor(color1);
         const intenseC2 = getIntenseColor(color2);
-        
+
         innerGlow.addColorStop(0, intenseC1);
         innerGlow.addColorStop(0.35, intenseC2);
         innerGlow.addColorStop(1, 'rgba(0,0,0,0)');
@@ -217,15 +214,15 @@ export default function BlackHoleBackground({
         ctx.arc(mouse.x, mouse.y, innerGlowRadius, 0, Math.PI * 2);
         ctx.fillStyle = innerGlow;
         ctx.fill();
-        
+
         for (let i = 0; i < blobs.length; i++) {
           const blob = blobs[i];
           blob.angle -= blob.speed * powerRef.current * speedFactor;
-          
+
           const currentDist = (blob.dist + Math.sin(time * 2 + blob.offset) * 15) * sizeFactor * 1.25;
           const bx = mouse.x + Math.cos(blob.angle) * currentDist;
           const by = mouse.y + Math.sin(blob.angle) * currentDist;
-          
+
           const brightness = Math.max(0, 1 - (currentDist / (90 * sizeFactor * 1.25)));
           const dynamicOpacity = (0.04 + brightness * 0.8).toFixed(2);
           const dynamicColor = blob.color.replace('0.04)', `${dynamicOpacity})`);
@@ -234,7 +231,7 @@ export default function BlackHoleBackground({
           const grad = ctx.createRadialGradient(bx, by, 0, bx, by, blobSize);
           grad.addColorStop(0, dynamicColor);
           grad.addColorStop(1, 'rgba(0,0,0,0)');
-          
+
           ctx.beginPath();
           ctx.arc(bx, by, blobSize, 0, Math.PI * 2);
           ctx.fillStyle = grad;
@@ -249,13 +246,13 @@ export default function BlackHoleBackground({
         ctx.save();
         ctx.globalAlpha = 1.0;
         ctx.globalCompositeOperation = 'source-over';
-        // Draw pure black center (event horizon) - mostly solid black with a tiny soft edge fade (1.3x larger)
+
         const centerRadius = (35 + 10) * sizeFactor * 1.3;
         const grad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, centerRadius);
         grad.addColorStop(0, '#000000');
-        grad.addColorStop(0.90, '#000000'); // Remains completely solid black for the inner 90%
-        grad.addColorStop(1, 'rgba(0,0,0,0)'); // Soft edge falloff in the outer 10%
-        
+        grad.addColorStop(0.90, '#000000');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+
         ctx.fillStyle = grad;
         ctx.beginPath();
         ctx.arc(mouse.x, mouse.y, centerRadius, 0, Math.PI * 2);
@@ -268,8 +265,7 @@ export default function BlackHoleBackground({
       const { speed: configSpeed, size: configSize } = configRef.current;
       const speedFactor = configSpeed / 50;
       const sizeFactor = Math.max(0.1, configSize / 50);
-      
-      // Gravitational reach (pull radius) scales with global energy/power
+
       const maxDist = 300 * sizeFactor * (0.6 + 0.4 * powerRef.current);
 
       ctx.clearRect(0, 0, width, height);
@@ -280,20 +276,17 @@ export default function BlackHoleBackground({
       for (let i = 0; i < dashes.length; i++) {
         const dash = dashes[i];
 
-        // Draw accretion disk when we reach its Z plane to create correct 3D overlap (layers behind vs. in front)
         if (!accretionDiskDrawn && dash.z >= blackHoleZThreshold) {
           drawAccretionDisk(sizeFactor, speedFactor);
           accretionDiskDrawn = true;
         }
 
-        // 3D gravity calculation using depth difference
         const dx = mouse.x - dash.x;
         const dy = mouse.y - dash.y;
-        
-        // Calculate distance in 3D space. The event horizon is at z = 1.0.
+
         const depthDiff = (1.0 - dash.z) * 150;
         const dist3D = Math.sqrt(dx * dx + dy * dy + depthDiff * depthDiff);
-        
+
         const currentBaseSpeed = dash.baseSpeed * (0.35 + 0.65 * dash.z);
         const currentLength = dash.length * Math.max(0.1, sizeFactor) * (0.3 + 0.7 * dash.z);
 
@@ -303,19 +296,16 @@ export default function BlackHoleBackground({
         let influence = 0;
         if (dist3D < maxDist && dist3D > 0 && powerRef.current > 0) {
           influence = (maxDist - dist3D) / maxDist;
-          // Cubic smoothing to avoid boundary jitter/hysteresis
+
           influence = influence * influence * (3 - 2 * influence);
         }
 
         if (influence > 0) {
           const angle = Math.atan2(dy, dx);
-          
-          // Smooth gravitational pull curve that grows stronger quadratically with global energy/power
+
           const pullForce = Math.pow(influence, 1.8) * 0.5 * Math.pow(powerRef.current, 1.5);
-          
-          // Swirl points inwards (angle + PI/2.3 ≈ 78 degrees) to prevent stable orbits
-          // and guide particles smoothly into the event horizon center.
-          const swirlAngle = angle + Math.PI / 2.3; 
+
+          const swirlAngle = angle + Math.PI / 2.3;
           const swirlForce = Math.pow(influence, 1.5) * 1.2 * Math.pow(powerRef.current, 1.5) * speedFactor;
 
           const bhAccX = Math.cos(angle) * pullForce + Math.cos(swirlAngle) * swirlForce;
@@ -323,11 +313,9 @@ export default function BlackHoleBackground({
 
           dash.vx += bhAccX;
           dash.vy += bhAccY;
-          
-          // Boost opacity on approach due to compression
+
           ctx.globalAlpha = Math.min(dash.opacity + influence * 1.5, 1.0) * (0.2 + 0.8 * dash.z);
 
-          // Reset if it gets too close in 2D space and its depth matches the horizon swallow depth
           const dist2D = Math.sqrt(dx * dx + dy * dy);
           if (dist2D < 25 * sizeFactor && Math.abs(1.0 - dash.z) < 0.3) {
             Object.assign(dash, createDash(-50, dash.z));
@@ -337,13 +325,11 @@ export default function BlackHoleBackground({
           ctx.globalAlpha = dash.opacity * (0.2 + 0.8 * dash.z);
         }
 
-        // Seamless return to horizontal flow, inversely proportional to the gravitational influence
         const returnFactor = 1.0 - influence;
         dash.vy += (0 - dash.vy) * 0.05 * returnFactor;
         dash.vx += (targetBaseVx - dash.vx) * 0.05 * returnFactor;
         dash.y += (dash.baseY - dash.y) * 0.02 * returnFactor;
 
-        // Velocity ceiling scaled by multiplier and depth (background lines move slower)
         const currentSpeed = Math.sqrt(dash.vx * dash.vx + dash.vy * dash.vy);
         const limitMult = powerRef.current === 0 ? 0.4 : powerRef.current;
         const maxSpeed = 6 * limitMult * Math.max(1, speedFactor) * (0.4 + 0.6 * dash.z);
@@ -355,13 +341,11 @@ export default function BlackHoleBackground({
         dash.x += dash.vx;
         dash.y += dash.vy;
 
-        // Screen boundary wrap-around
         if (dash.x > width + currentLength) {
           Object.assign(dash, createDash(-50, dash.z));
           dash.baseY = dash.y;
         }
 
-        // Draw the line aligned with its current heading
         const drawAngle = Math.atan2(dash.vy, dash.vx);
         ctx.beginPath();
         ctx.moveTo(dash.x, dash.y);
@@ -372,12 +356,10 @@ export default function BlackHoleBackground({
         ctx.stroke();
       }
 
-      // Ensure accretion disk is drawn even if no foreground dashes exist
       if (!accretionDiskDrawn) {
         drawAccretionDisk(sizeFactor, speedFactor);
       }
 
-      // Draw the pure black event horizon last on top of all dashes and accretion gas
       drawEventHorizon(sizeFactor);
 
       ctx.globalAlpha = 1.0;
@@ -395,8 +377,8 @@ export default function BlackHoleBackground({
   }, [color1, color2, color3, color4]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       className="fixed inset-0 -z-10 pointer-events-none bg-zinc-950"
     />
   );

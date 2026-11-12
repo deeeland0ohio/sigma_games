@@ -1,11 +1,6 @@
 import { MusicTrackResult, StreamResolutionResult, formatSeconds } from "./types";
 import { resolveFullLengthAudio } from "./fullLength";
 
-/**
- * "Octave" is the iTunes Search catalog: real metadata (title, artist, artwork,
- * duration) plus a 30-second preview. Same rule as Deezer — verified full audio
- * if we can prove it is the same recording, otherwise the real preview.
- */
 export async function searchOctave(query: string, limit = 30): Promise<MusicTrackResult[]> {
   try {
     const res = await fetch(

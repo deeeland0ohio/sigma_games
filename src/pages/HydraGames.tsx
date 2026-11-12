@@ -30,7 +30,7 @@ export default function HydraGames() {
       if (Array.isArray(raw)) {
         const mapped: HydraGame[] = raw.map((g: any) => {
           const title = g.title || "Untitled Game";
-          
+
           let gameUrl = '';
           if (g.file_name) {
             let path = g.file_name;
@@ -56,7 +56,6 @@ export default function HydraGames() {
           };
         }).filter(g => g.url);
 
-        // Sort alphabetically (0-9-a-z)
         mapped.sort((a, b) => {
           const titleA = (a.title || "").toLowerCase();
           const titleB = (b.title || "").toLowerCase();
@@ -80,7 +79,7 @@ export default function HydraGames() {
     setSelectedGame(game);
   };
 
-  const filteredGames = games.filter(g => 
+  const filteredGames = games.filter(g =>
     g.title.toLowerCase().includes(search.toLowerCase())
   );
   const displayedGames = filteredGames.slice(0, visibleCount);
@@ -139,14 +138,14 @@ export default function HydraGames() {
                 />
               );
             })}
-            
+
             {displayedGames.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredGames.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -161,7 +160,6 @@ export default function HydraGames() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -216,7 +214,7 @@ export default function HydraGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

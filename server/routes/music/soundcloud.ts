@@ -4,14 +4,6 @@ import { resolveSoundCloudStream, searchSoundCloudTracks, soundcloudGet } from "
 
 export { getValidSoundCloudClientId, resolveSoundCloudStream } from "./soundcloudApi";
 
-/**
- * SoundCloud source.
- *
- * Search returns the real track ids, so playback is that exact track —
- * SoundCloud tells us its own transcodings and we use them. The only fallback
- * is a verified copy of the same recording, never a fuzzy search match.
- */
-
 export async function searchSoundCloud(query: string, limit = 30): Promise<MusicTrackResult[]> {
   try {
     const res = await soundcloudGet(
@@ -49,7 +41,6 @@ export async function searchSoundCloud(query: string, limit = 30): Promise<Music
   }
 }
 
-/** Kept for callers that only need the raw candidates. */
 export { searchSoundCloudTracks };
 
 export async function resolveSoundCloudTrack(track: {
@@ -61,7 +52,6 @@ export async function resolveSoundCloudTrack(track: {
   const rawId = String(track.id || "").replace(/^sc_/, "");
   const seconds = Number(track.duration || 0);
 
-  // 1. The exact SoundCloud track that was clicked.
   if (rawId && !Number.isNaN(Number(rawId))) {
     const stream = await resolveSoundCloudStream(rawId);
     if (stream?.url) {
@@ -75,7 +65,6 @@ export async function resolveSoundCloudTrack(track: {
     }
   }
 
-  // 2. The same recording, verified, elsewhere.
   return resolveFullLengthAudio(
     { title: track.name, artist: track.artist, duration: track.duration },
     deadline

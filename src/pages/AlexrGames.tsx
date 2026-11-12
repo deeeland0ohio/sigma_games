@@ -18,9 +18,8 @@ export interface AlexrGame {
 
 export default function AlexrGames() {
   const [games, setGames] = useState<AlexrGame[]>(() => {
-    // Exclude Code Editor on initial mount if present in backup dataset
-    return initialAlexrGames.filter(g => 
-      g.title !== "Alexr Code Editor" && 
+    return initialAlexrGames.filter(g =>
+      g.title !== "Alexr Code Editor" &&
       g.path !== "https://cdn.jsdelivr.net/gh/dskjfoisjfsjio/alexrsworld@main/Apps/codeeditor.html"
     ).map(g => ({
       ...g,
@@ -34,7 +33,7 @@ export default function AlexrGames() {
   const [selectedGame, setSelectedGame] = useState<AlexrGame | null>(null);
   const [visibleCount, setVisibleCount] = useState(100);
   const [reloadKey, setReloadKey] = useState(0);
-  
+
   const { toggleFavorite, isFavorite } = useFavorites();
 
   const loadGames = async () => {
@@ -44,22 +43,20 @@ export default function AlexrGames() {
       if (res.ok) {
         const raw = await res.json() as AlexrGame[];
         if (Array.isArray(raw)) {
-          // Filter out "Alexr Code Editor" from dynamic data source
-          const parsed = raw.filter((g: AlexrGame) => 
-            g.title !== "Alexr Code Editor" && 
+          const parsed = raw.filter((g: AlexrGame) =>
+            g.title !== "Alexr Code Editor" &&
             g.path !== "https://cdn.jsdelivr.net/gh/dskjfoisjfsjio/alexrsworld@main/Apps/codeeditor.html"
           ).map(g => ({
             ...g,
             path: g.path
           }));
-          
-          // Sort alphabetically (0-9-a-z)
+
           parsed.sort((a, b) => {
             const titleA = (a.title || "").toLowerCase();
             const titleB = (b.title || "").toLowerCase();
             return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
           });
-          
+
           setGames(parsed);
           const allCats = Array.from(new Set(parsed.map((g: AlexrGame) => g.category).filter(Boolean))) as string[];
           setCategories(allCats);
@@ -78,11 +75,11 @@ export default function AlexrGames() {
 
   const openGame = (game: AlexrGame) => {
     setSelectedGame(game);
-    setReloadKey(0); // Reset reload key upon opening new game
+    setReloadKey(0);
   };
 
   const filteredGames = games.filter(g => {
-    const matchSearch = g.title.toLowerCase().includes(search.toLowerCase()) || 
+    const matchSearch = g.title.toLowerCase().includes(search.toLowerCase()) ||
                         g.description.toLowerCase().includes(search.toLowerCase());
     const matchCategory = selectedCategory ? g.category === selectedCategory : true;
     return matchSearch && matchCategory;
@@ -93,7 +90,6 @@ export default function AlexrGames() {
   return (
     <PageLayout title="Alexr Games" maxWidth="wide" showBack={true}>
       <div className="space-y-6">
-        {/* Header Summary */}
         <div className="border-b border-zinc-800 pb-4">
           <h1 className="text-3xl font-bold text-white tracking-tight uppercase">Alexr Games</h1>
           <p className="text-zinc-500 mt-2">
@@ -101,7 +97,6 @@ export default function AlexrGames() {
           </p>
         </div>
 
-        {/* Filters and Controls */}
         <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
           <div className="relative flex-1 w-full max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" />
@@ -113,10 +108,10 @@ export default function AlexrGames() {
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700 focus:border-transparent transition-all"
             />
           </div>
-          
+
           <div className="flex flex-row gap-3 w-full sm:w-auto">
-            <select 
-              value={selectedCategory} 
+            <select
+              value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
               className="flex-1 sm:flex-none bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-zinc-700 focus:border-transparent transition-all min-w-[150px]"
             >
@@ -125,7 +120,7 @@ export default function AlexrGames() {
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
-            
+
             <button
               onClick={loadGames}
               disabled={loading}
@@ -137,7 +132,6 @@ export default function AlexrGames() {
           </div>
         </div>
 
-        {/* Display Grid - Matched Exactly to GN-Math */}
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-zinc-500" />
@@ -178,7 +172,6 @@ export default function AlexrGames() {
           </div>
         )}
 
-        {/* Load More Button */}
         {filteredGames.length > visibleCount && (
            <div className="flex justify-center mt-6">
              <button
@@ -191,7 +184,6 @@ export default function AlexrGames() {
          )}
       </div>
 
-      {/* Fullscreen Overlay Component */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -246,7 +238,7 @@ export default function AlexrGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 id="alexr-game-iframe"

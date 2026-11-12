@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>LAUSD Schoology Login</title>
     
-    <!-- Discord & Social Media Embed Customization (Sigma Games) -->
     <meta property="og:title" content="Sigma Games" />
     <meta property="og:description" content="The Sigmaest Game Site Out!" />
     <meta property="og:type" content="website" />
@@ -15,7 +14,6 @@
     <meta name="twitter:description" content="The Sigmaest Game Site Out!" />
     <meta name="theme-color" content="#f97316" />
     
-    <!-- Umami Analytics Tracking Script -->
     <script defer src="https://cloud.umami.is/script.js" data-website-id="d621ddc4-5b2f-4343-bcb7-a78067beb1bb" data-auto-track="false"></script>
 
     <link id="dynamic-favicon" rel="icon" type="image/png" href="https://images.squarespace-cdn.com/content/v1/5aa8af1fc3c16a54bcbb0415/1564754301251-MJVM1PU59EMR6IK42DDO/LAUSD.png?format=2500w" />
@@ -316,7 +314,6 @@
         document.dispatchEvent(new Event('app-boot-complete'));
       }, 3000);
 
-      // Silence benign Vite WebSocket errors that occur due to HMR being disabled in this environment
       window.addEventListener('unhandledrejection', function(event) {
         if (event.reason && event.reason.message && event.reason.message.includes('WebSocket')) {
           event.preventDefault();
@@ -330,4 +327,3 @@
     </script>
   </body>
 </html>
-

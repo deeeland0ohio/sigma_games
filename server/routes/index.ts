@@ -7,12 +7,10 @@ import musicRouter from "./music";
 
 const apiRouter = Router();
 
-// Health check
 apiRouter.get("/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Mount module routers
 apiRouter.use(contentLoaderRouter);
 apiRouter.use(chatRouter);
 apiRouter.use(gamesRouter);

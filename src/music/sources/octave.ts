@@ -1,6 +1,5 @@
 import { ClientMusicTrack, formatDuration } from "./types";
 
-/** Client-side fallback search for the iTunes catalog. Preview audio only. */
 export async function fetchClientOctave(query: string = "", page: number = 1, limit: number = 30): Promise<ClientMusicTrack[]> {
   const searchTerm = query.trim() || "Top Hits";
   const offset = (page - 1) * limit;

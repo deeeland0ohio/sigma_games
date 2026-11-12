@@ -4,17 +4,14 @@ import PageLayout from '../components/PageLayout';
 import SearchBar from '../components/SearchBar';
 
 export default function AllGames() {
-  // The page is being rebuilt, so it opens behind a notice until the visitor
-  // chooses to continue.
   const [acknowledged, setAcknowledged] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [games, setGames] = useState<any[]>([]);
   const [visibleCount, setVisibleCount] = useState(100);
 
   useEffect(() => {
-    // Populate with only our local games list and sort alphabetically (0-9-a-z)
     const initialList = allGamesList.map(g => ({ ...g, source: 'local' }));
-    initialList.sort((a, b) => 
+    initialList.sort((a, b) =>
       (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
     );
     setGames(initialList);
@@ -31,9 +28,9 @@ export default function AllGames() {
   const displayedGames = filteredGames.slice(0, visibleCount);
 
   return (
-    <PageLayout 
-      title="Our Games" 
-      showBack={true} 
+    <PageLayout
+      title="Our Games"
+      showBack={true}
       maxWidth="7xl"
     >
       {!acknowledged ? (
@@ -62,9 +59,9 @@ export default function AllGames() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {displayedGames.length > 0 ? (
               displayedGames.map((game, i) => (
-                <GameCard 
-                  key={`${game.id}-${i}`} 
-                  game={game} 
+                <GameCard
+                  key={`${game.id}-${i}`}
+                  game={game}
                 />
               ))
             ) : (

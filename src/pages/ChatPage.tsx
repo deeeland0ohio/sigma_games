@@ -38,8 +38,6 @@ const getOS = () => {
   return "Other";
 };
 
-// We broadcast all real-time chat sync actions to our Node.js back-end.
-// The backend handles saving histories, checking bans, publishing to Ably if configured, OR streaming over native fallback SSE.
 const publishEvent = async (payload: any) => {
   try {
     await fetch('/api/chat/broadcast', {
@@ -56,8 +54,6 @@ const publishEvent = async (payload: any) => {
 
 export default function ChatPage() {
   const [userId] = useState<string>(() => {
-    // Generate a clean, unique ID per page load / tab instance to prevent collisions
-    // when tabs are duplicated or cloned, while retaining their session nickname.
     if (typeof storage !== 'undefined') {
       storage.removeItem('chat_guest_id');
     }
@@ -80,15 +76,14 @@ export default function ChatPage() {
     return false;
   });
   const [ablyActive, setAblyActive] = useState(false);
-  
+
   const [inputNickname, setInputNickname] = useState('');
   const [inputPassword, setInputPassword] = useState('');
-  
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [isConnected, setIsConnected] = useState(navigator.onLine);
-  
-  // Track online presence timestamps
+
   const [usersMap, setUsersMap] = useState<Record<string, ChatUser>>({});
   const [bannedNicknames, setBannedNicknames] = useState<Record<string, number>>({});
   const [bannedUserIds, setBannedUserIds] = useState<Record<string, number>>({});
@@ -96,12 +91,11 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, messageId: string, userId: string, nickname: string } | null>(null);
   const [kickWarning, setKickWarning] = useState<{ title: string; message: string } | null>(null);
-  const [, setTick] = useState(0); // Force custom re-render for message expirations
+  const [, setTick] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastEnterTime = useRef<number>(0);
   const colors = useThemeColors();
 
-  // Create stable, non-stale references for state values accessed in subscriptions
   const nicknameRef = useRef(nickname);
   const userIdRef = useRef(userId);
   const isOwnerRef = useRef(isOwner);
@@ -112,7 +106,6 @@ export default function ChatPage() {
   isOwnerRef.current = isOwner;
   isTypingRef.current = isTyping;
 
-  // Clean kick_end checks on mount
   useEffect(() => {
     const kickEnd = storage.getItem('kick_end');
     if (kickEnd && userId) {
@@ -128,11 +121,10 @@ export default function ChatPage() {
     }
   }, [userId]);
 
-  // Real-time ticking for message expirations and ban countdowns
   useEffect(() => {
     const interval = setInterval(() => {
       setTick(t => t + 1);
-      // Clean up storage kick_end when expired
+
       const kickEnd = storage.getItem('kick_end');
       if (kickEnd && Date.now() >= parseInt(kickEnd)) {
         storage.removeItem('kick_end');
@@ -141,7 +133,6 @@ export default function ChatPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Automatic eviction if current user is banned
   useEffect(() => {
     if (!nickname || !userId) return;
 
@@ -162,7 +153,6 @@ export default function ChatPage() {
 
   const lastEnforcedTimes = useRef<Record<string, number>>({});
 
-  // Owner auto-enforcing active bans if a banned user reappears/re-sends presence heartbeat
   useEffect(() => {
     if (!isOwner || !userId) return;
 
@@ -180,7 +170,6 @@ export default function ChatPage() {
         const key = `${u.id}-${remainingEnd}`;
         const lastEnforced = lastEnforcedTimes.current[key] || 0;
 
-        // Only re-enforce once every 15 seconds per unique ban to keep channel traffic low
         if (Date.now() - lastEnforced > 15000) {
           lastEnforcedTimes.current[key] = Date.now();
           publishEvent({
@@ -196,7 +185,6 @@ export default function ChatPage() {
     });
   }, [usersMap, bannedUserIds, bannedNicknames, isOwner, userId]);
 
-  // Sync network status and custom window click listeners
   useEffect(() => {
     const handleOnline = () => setIsConnected(true);
     const handleOffline = () => setIsConnected(false);
@@ -213,7 +201,6 @@ export default function ChatPage() {
     };
   }, []);
 
-  // Dynamic Event Handling for incoming ntfy events
   const handleIncomingPayload = (payload: any) => {
     if (!payload || !payload.type) return;
 
@@ -362,7 +349,6 @@ export default function ChatPage() {
     handleIncomingPayloadRef.current = handleIncomingPayload;
   }, [handleIncomingPayload]);
 
-  // Real-time listener: supporting Ably Realtime and Native Server-SSE fallback
   useEffect(() => {
     if (!userId) return;
 
@@ -372,8 +358,7 @@ export default function ChatPage() {
 
     const bootstrapAndConnect = async () => {
       setAuthLoading(true);
-      
-      // 1. Fetch persistent chat history from the Node back-end cache
+
       try {
         const historyRes = await fetch('/api/chat/history');
         if (historyRes.ok && active) {
@@ -393,7 +378,6 @@ export default function ChatPage() {
 
       if (!active) return;
 
-      // 2. Query server for Ably Configuration Status
       let isAblyConfigured = false;
       try {
         const checkRes = await fetch('/api/ably-check');
@@ -412,15 +396,13 @@ export default function ChatPage() {
         }
       }
 
-      // 3. Connect to live real-time streams
       if (isAblyConfigured) {
-        // --- ELEGANT ABLY MODE ---
         try {
           ablyRealtime = new Ably.Realtime({
             authUrl: `/api/ably-auth?clientId=${userId}`
           });
           const channel = ablyRealtime.channels.get('global-chat');
-          
+
           channel.subscribe('event', (msg) => {
             if (!active) return;
             try {
@@ -431,7 +413,6 @@ export default function ChatPage() {
             }
           });
 
-          // Send an immediate presence query to discover active peers instantly
           try {
             channel.publish('event', JSON.stringify({
               type: 'presence_request',
@@ -444,8 +425,6 @@ export default function ChatPage() {
           console.error("Failed establishing Ably Realtime connection:", ablyErr);
         }
       } else {
-        // --- HIGH-PERFORMANCE NATIVE SSE FALLBACK MODE ---
-        // Runs entirely on the Cloud Run Node server, 100% free, zero limits, supporting 100+ concurrent users!
         try {
           sseSource = new EventSource('/api/chat/sse');
           sseSource.onmessage = (event) => {
@@ -458,7 +437,6 @@ export default function ChatPage() {
             }
           };
 
-          // Send an immediate presence query to discover active peers instantly
           publishEvent({
             type: 'presence_request',
             id: userId
@@ -486,7 +464,6 @@ export default function ChatPage() {
     };
   }, [userId]);
 
-  // Presence Heartbeat Loop
   useEffect(() => {
     if (!nickname || !userId) return;
 
@@ -510,7 +487,6 @@ export default function ChatPage() {
     };
   }, [nickname, userId, isTyping, isOwner]);
 
-  // Broadcast offline presence on true unmount
   useEffect(() => {
     return () => {
       if (userId) {
@@ -522,7 +498,6 @@ export default function ChatPage() {
     };
   }, [userId]);
 
-  // Typing status effect
   useEffect(() => {
     if (!nickname) return;
     const hasText = newMessage.trim().length > 0;
@@ -562,26 +537,23 @@ export default function ChatPage() {
       return;
     }
 
-    // Validate passive/historic kicks by nickname (case-insensitive)
     const activeNickKickEnd = bannedNicknames[trimmedNickname.toLowerCase()];
     if (activeNickKickEnd && Date.now() < activeNickKickEnd) {
       return;
     }
 
-    // Validate passive/historic kicks by guest userId
     const activeIdKickEnd = bannedUserIds[userId];
     if (activeIdKickEnd && Date.now() < activeIdKickEnd) {
       return;
     }
 
     try {
-      // Deconflict nicknames client-side
       let finalNickname = trimmedNickname;
       let suffix = 1;
       const existingNicknames = Object.values(usersMap)
         .filter(u => Date.now() - u.lastActive < 18000)
         .map(u => u.nickname.toLowerCase());
-      
+
       if (existingNicknames.includes(finalNickname.toLowerCase())) {
         if (isSigmaDev) {
           finalNickname = "Sigma Dev";
@@ -599,7 +571,6 @@ export default function ChatPage() {
       setNickname(finalNickname);
       setIsOwner(isSigmaDev);
 
-      // Broadcast immediate presence
       if (userId) {
         publishEvent({
           type: 'user_presence',
@@ -656,7 +627,7 @@ export default function ChatPage() {
   const handleKickUser = async (targetNickname: string, kickDuration: 'soft' | '5m' | '1h' = 'soft') => {
     if (!isOwner || !userId) return;
 
-    let duration = 5000; // soft kick: 5s
+    let duration = 5000;
     if (kickDuration === '5m') {
       duration = 300000;
     } else if (kickDuration === '1h') {
@@ -705,7 +676,7 @@ export default function ChatPage() {
     if (e.key === 'Enter' && !e.shiftKey) {
       const now = Date.now();
       const diff = now - lastEnterTime.current;
-      
+
       if (diff < 500 && diff > 0) {
         e.preventDefault();
         handleSendMessage();
@@ -728,21 +699,18 @@ export default function ChatPage() {
     setIsOwner(false);
   };
 
-  // Force logout if Ably is inactive
   useEffect(() => {
     if (!authLoading && !ablyActive && nickname) {
       handleLogout();
     }
   }, [authLoading, ablyActive, nickname]);
 
-  // Scroll to bottom helper
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages, nickname]);
 
-  // Client-side mapping & filter
   const mappedMessages = messages.map(msg => {
     if (msg.isPermanentlyRemoved) {
       return null;
@@ -757,17 +725,15 @@ export default function ChatPage() {
   }).filter((msg): msg is Message => msg !== null);
 
   const filteredMessages = mappedMessages.filter(msg => {
-    const twoHoursAgo = Date.now() - 7200000; // Filter messages older than 2 hours
+    const twoHoursAgo = Date.now() - 7200000;
     if (msg.createdAt <= twoHoursAgo) return false;
 
-    // Filter out messages from any users who are currently banned locally
     const bNick = bannedNicknames[msg.senderName.toLowerCase()];
     const bId = bannedUserIds[msg.senderId];
     const isBanned = (bNick && Date.now() < bNick) || (bId && Date.now() < bId);
     return !isBanned;
   });
 
-  // Calculate last message timestamp for each user
   const lastMessageTimeMap: Record<string, number> = {};
   filteredMessages.forEach(m => {
     if (!lastMessageTimeMap[m.senderId] || m.createdAt > lastMessageTimeMap[m.senderId]) {
@@ -775,7 +741,6 @@ export default function ChatPage() {
     }
   });
 
-  // Derived active users list from usersMap (excluding users currently under restriction)
   const users = Object.values(usersMap)
     .filter(u => Date.now() - u.lastActive < 18000)
     .filter(u => {
@@ -789,10 +754,9 @@ export default function ChatPage() {
       const timeB = lastMessageTimeMap[b.id] || 0;
 
       if (timeA !== timeB) {
-        return timeB - timeA; // most recent message first
+        return timeB - timeA;
       }
 
-      // fallback: show current user first, then Owner, then by lastActive
       if (a.id === userId && b.id !== userId) return -1;
       if (b.id === userId && a.id !== userId) return 1;
       if (a.isOwner && !b.isOwner) return -1;
@@ -803,11 +767,11 @@ export default function ChatPage() {
 
   const activeIdKickEnd = bannedUserIds[userId];
   const isIdBanned = activeIdKickEnd ? Date.now() < activeIdKickEnd : false;
-  
+
   const activeNickKickEnd = bannedNicknames[inputNickname.trim().toLowerCase()];
   const isNickBanned = activeNickKickEnd ? Date.now() < activeNickKickEnd : false;
 
-  const currentBanTimeLeft = isIdBanned 
+  const currentBanTimeLeft = isIdBanned
     ? Math.max(0, Math.ceil((activeIdKickEnd - Date.now()) / 1000))
     : isNickBanned
     ? Math.max(0, Math.ceil((activeNickKickEnd - Date.now()) / 1000))
@@ -830,10 +794,8 @@ export default function ChatPage() {
 
   const isJoinDisabled = !ablyActive || isIdBanned || (isNickBanned && inputNickname.trim().toLowerCase() !== "") || !inputNickname.trim();
 
-
   return (
     <PageLayout title="" maxWidth="full" showBack={false}>
-      {/* Realtime / Ably mode indicator badge */}
       <div className="max-w-[95%] mx-auto mb-3 flex items-center justify-between px-2">
         <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800/50 px-3 py-1.5 rounded-full z-20 relative">
           <div className={`w-2 h-2 rounded-full ${ablyActive ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.8)] animate-pulse' : 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)] animate-pulse'}`} />
@@ -846,10 +808,8 @@ export default function ChatPage() {
 
       <div className="max-w-[95%] mx-auto">
         <div className="w-full h-[calc(100vh-10rem)] flex flex-col bg-zinc-900/95 rounded-2xl overflow-hidden relative shadow-2xl border border-zinc-800/50">
-          {/* Subtle theme glow background */}
           <div className={`absolute inset-0 bg-gradient-to-br ${colors.gradientFrom} ${colors.gradientTo} opacity-10 pointer-events-none`} />
-            
-            {/* Chat Header */}
+
             <div className="p-6 border-b border-zinc-800/30 flex items-center justify-between bg-zinc-900/40 relative z-10">
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-lg ${colors.primaryBg} text-black`}>
@@ -870,7 +830,7 @@ export default function ChatPage() {
                 </div>
               </div>
               {nickname && (
-                <button 
+                <button
                   onClick={handleLogout}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-all text-xs font-bold uppercase tracking-widest"
                 >
@@ -880,7 +840,6 @@ export default function ChatPage() {
               )}
             </div>
 
-            {/* Chat Area */}
             <div className="flex-1 flex flex-row min-h-0 relative z-10 overflow-hidden">
               {authLoading ? (
                 <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -888,22 +847,22 @@ export default function ChatPage() {
                 </div>
               ) : !nickname ? (
                 <div className="absolute inset-0 flex items-center justify-center p-4 md:p-8 text-center">
-                  <form 
+                  <form
                     onSubmit={handleJoinChat}
                     className="w-full max-w-sm flex flex-col items-center space-y-8"
                   >
-                    <motion.div 
+                    <motion.div
                       initial={{ scale: 0.9, opacity: 0 }}
                       animate={{ scale: 1, opacity: 1 }}
                       className="w-20 h-20 rounded-full bg-zinc-800 flex items-center justify-center border border-zinc-700 shadow-xl"
                     >
                       <UserIcon size={40} className="text-zinc-500" />
                     </motion.div>
-                    
+
                     <div className="space-y-2">
                       <h3 className="text-2xl font-bold text-white tracking-tight uppercase">Enter Chatroom</h3>
                     </div>
-                    
+
                     <div className="w-full space-y-4">
                       <div className="space-y-4 text-left">
                         <div>
@@ -924,7 +883,7 @@ export default function ChatPage() {
 
                         <AnimatePresence>
                           {ablyActive && inputNickname.trim().toLowerCase() === "sigma dev" && (
-                            <motion.div 
+                            <motion.div
                               initial={{ opacity: 0, height: 0 }}
                               animate={{ opacity: 1, height: 'auto' }}
                               exit={{ opacity: 0, height: 0 }}
@@ -970,10 +929,8 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <>
-                  {/* Main Chat Content */}
                   <div className="flex-1 flex flex-col min-h-0 border-r border-zinc-800/50">
-                    {/* Messages List */}
-                    <div 
+                    <div
                       ref={scrollRef}
                       className="flex-1 overflow-y-auto p-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800"
                     >
@@ -984,12 +941,11 @@ export default function ChatPage() {
                         </div>
                       ) : (
                         filteredMessages.map((msg, idx) => (
-                          <div 
+                          <div
                             key={msg.id || idx}
                             className={`flex flex-col group ${msg.senderName === nickname ? 'items-end' : 'items-start'}`}
                             onContextMenu={(e) => handleContextMenu(e, msg)}
                           >
-                            {/* Name above message */}
                             <div className="flex items-center gap-2 mb-1 px-1">
                               <span className={`text-[10px] font-bold tracking-widest ${msg.senderName === "Sigma Dev" ? 'animate-rainbow' : 'text-zinc-500'}`}>
                                 {msg.senderName}
@@ -1000,17 +956,17 @@ export default function ChatPage() {
                                 </span>
                               )}
                             </div>
-                            
+
                             <div className={`flex items-center gap-2 max-w-[85%] ${msg.senderName === nickname ? 'flex-row-reverse' : 'flex-row'}`}>
-                              <motion.div 
+                              <motion.div
                                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                                 animate={{ opacity: 1, y: 0, scale: 1 }}
                                 className={`
                                   px-4 py-3 rounded-2xl text-sm md:text-base break-words whitespace-pre-wrap relative group/msg
                                   ${msg.isPlaceholder ? 'italic opacity-50' : ''}
-                                  ${msg.isSystemInfo ? 'bg-red-900/20 border border-red-500/30 text-red-200 italic' : 
-                                    msg.senderName === nickname 
-                                    ? `${colors.primaryBg} text-black rounded-tr-none font-medium` 
+                                  ${msg.isSystemInfo ? 'bg-red-900/20 border border-red-500/30 text-red-200 italic' :
+                                    msg.senderName === nickname
+                                    ? `${colors.primaryBg} text-black rounded-tr-none font-medium`
                                     : 'bg-zinc-800/50 text-zinc-200 rounded-tl-none'}
                                 `}
                               >
@@ -1022,14 +978,13 @@ export default function ChatPage() {
                                     <span>]</span>
                                   </div>
                                 ) : msg.text}
-                                
-                                {/* Delete Button on Hover */}
+
                                 {!msg.isPlaceholder && !msg.isSystemInfo && !msg.isAdminDeleted && msg.senderName === nickname && (
-                                  <button 
+                                  <button
                                     onClick={() => handleDeleteMessage(msg.id, false)}
                                     className={`
-                                      absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 p-1.5 
-                                      rounded-lg bg-zinc-900/80 text-zinc-400 hover:text-red-500 hover:bg-zinc-800 
+                                      absolute top-1/2 -translate-y-1/2 opacity-0 group-hover/msg:opacity-100 p-1.5
+                                      rounded-lg bg-zinc-900/80 text-zinc-400 hover:text-red-500 hover:bg-zinc-800
                                       transition-all shadow-xl backdrop-blur-sm border border-zinc-700/50
                                       ${msg.senderName === nickname ? '-left-10' : '-right-10'}
                                     `}
@@ -1045,7 +1000,6 @@ export default function ChatPage() {
                       )}
                     </div>
 
-                    {/* Message Input */}
                     <div className="p-6 border-t border-zinc-800 bg-zinc-900/40">
                       <div className="flex gap-4">
                         <textarea
@@ -1076,7 +1030,6 @@ export default function ChatPage() {
                     </div>
                   </div>
 
-                  {/* Sidebar */}
                   <div className="w-48 md:w-64 bg-zinc-900/30 flex flex-col overflow-hidden border-l border-zinc-800/50">
                     <div className="p-4 border-b border-zinc-800/50 flex items-center justify-between bg-zinc-900/20">
                       <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Online Users</h3>
@@ -1090,8 +1043,8 @@ export default function ChatPage() {
                           <motion.div
                             key={user.id}
                             initial={{ opacity: 0, x: 20 }}
-                            animate={{ 
-                              opacity: 1, 
+                            animate={{
+                              opacity: 1,
                               x: 0,
                             }}
                             exit={{ opacity: 0, x: 20 }}
@@ -1119,7 +1072,7 @@ export default function ChatPage() {
                               )}
                             </div>
                             {isOwner && userId && user.id !== userId && (
-                              <button 
+                              <button
                                 onClick={() => handleKickUser(user.nickname)}
                                 className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all"
                                 title="Kick User"
@@ -1138,7 +1091,6 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {/* Sigma Dev Context Menu */}
         <AnimatePresence>
           {contextMenu && (
             <motion.div
@@ -1156,8 +1108,8 @@ export default function ChatPage() {
                   <p className="text-xs font-black text-zinc-500 uppercase tracking-[0.2em]">Admin Controls</p>
                   <p className="text-base font-bold text-white truncate">{contextMenu.nickname}</p>
                 </div>
-                <button 
-                  onClick={(e) => { e.stopPropagation(); setContextMenu(null); }} 
+                <button
+                  onClick={(e) => { e.stopPropagation(); setContextMenu(null); }}
                   className="text-zinc-500 hover:text-white transition-colors p-1 rounded-md hover:bg-zinc-800"
                 >
                   <X size={18} />
@@ -1202,11 +1154,9 @@ export default function ChatPage() {
           )}
         </AnimatePresence>
 
-        {/* Kick Warning Modal */}
         <AnimatePresence>
           {kickWarning && (
             <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
-              {/* Backdrop */}
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 0.6 }}
@@ -1214,17 +1164,15 @@ export default function ChatPage() {
                 onClick={() => setKickWarning(null)}
                 className="absolute inset-0 bg-black"
               />
-              
-              {/* Modal Container */}
+
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 10 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 className="relative w-full max-w-md overflow-hidden rounded-2xl border border-red-900/50 bg-zinc-950 p-6 shadow-2xl z-10"
               >
-                {/* Glow Accent */}
                 <div className="absolute -top-12 -left-12 w-32 h-32 bg-red-600/10 rounded-full blur-2xl pointer-events-none" />
-                
+
                 <div className="flex items-start gap-4">
                   <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl">
                     <LogOut size={24} />
@@ -1234,7 +1182,7 @@ export default function ChatPage() {
                     <p className="text-zinc-400 mt-2 text-sm leading-relaxed">{kickWarning.message}</p>
                   </div>
                 </div>
-                
+
                 <div className="mt-6 flex justify-end">
                   <button
                     onClick={() => setKickWarning(null)}

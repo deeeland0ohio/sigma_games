@@ -32,7 +32,7 @@ export const NO_TRACK_ARTIST_PLACEHOLDER = "Select or search any track below";
 const isPlatformName = (str?: string) => {
   if (!str) return false;
   const s = str.trim().toLowerCase();
-  return ['soundcloud', 'youtube', 'youtube music', 'octave', 'deezer', 'yt'].includes(s);
+  return ['soundcloud', 'youtube', 'youtube music', 'octave', 'apple music', 'deezer', 'yt'].includes(s);
 };
 
 export type MusicSource = 'octave' | 'youtube' | 'soundcloud' | 'deezer';
@@ -48,7 +48,7 @@ interface SourceOption {
 const SOURCES: SourceOption[] = [
   {
     id: 'octave',
-    name: 'Octave',
+    name: 'Apple Music',
     colorClass: 'text-purple-400',
     activeBg: 'bg-purple-500/20 border-purple-500/40 text-purple-300 shadow-purple-500/10',
     icon: <Zap size={14} className="text-purple-400" />
@@ -106,7 +106,6 @@ export default function MusicSection() {
   const [hasSearched, setHasSearched] = useState(false);
   const [musicSource, setMusicSource] = useState<MusicSource>('soundcloud');
 
-  // Load initial trending music on mount
   useEffect(() => {
     loadTrendingMusic();
   }, []);
@@ -142,7 +141,6 @@ export default function MusicSection() {
         }
       }
 
-      // Direct client fallback
       const fallbackSongs = await fetchClientBySource(source, '', 1, 30);
       setSearchResults(fallbackSongs);
       setHasMore(fallbackSongs.length >= 30);
@@ -156,7 +154,6 @@ export default function MusicSection() {
     }
   };
 
-  // Handle manual search
   const handleSearch = async (e?: React.FormEvent, overrideKeyword?: string, source = musicSource) => {
     if (e) e.preventDefault();
     const query = (overrideKeyword !== undefined ? overrideKeyword : searchQuery).trim();
@@ -185,7 +182,6 @@ export default function MusicSection() {
         }
       }
 
-      // Direct client fallback
       const fallbackSongs = await fetchClientBySource(source, query, 1, 30);
       setSearchResults(fallbackSongs);
       setHasMore(fallbackSongs.length >= 30);
@@ -208,7 +204,6 @@ export default function MusicSection() {
     }
   };
 
-  // Load more tracks on scroll
   const handleLoadMore = async () => {
     if (isSearching || isLoadingMore || !hasMore) return;
 
@@ -234,7 +229,6 @@ export default function MusicSection() {
         }
       }
 
-      // Direct client fallback
       const fallbackSongs = await fetchClientBySource(musicSource, query, nextPage, 30);
       if (fallbackSongs.length > 0) {
         setSearchResults(prev => [...prev, ...fallbackSongs]);
@@ -259,7 +253,6 @@ export default function MusicSection() {
     }
   };
 
-  // Scroll handler
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
     if (scrollHeight - scrollTop - clientHeight < 100) {
@@ -278,7 +271,6 @@ export default function MusicSection() {
 
   return (
     <div className="space-y-8">
-      {/* Header & Master Player Deck */}
       <div className="p-6 md:p-8 bg-zinc-900/60 border border-zinc-800/80 rounded-3xl space-y-6 shadow-xl backdrop-blur-md">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3.5">
@@ -293,10 +285,8 @@ export default function MusicSection() {
           </div>
         </div>
 
-        {/* Master Player Deck */}
         <div className="bg-zinc-950/90 border border-zinc-800/80 p-6 rounded-2xl space-y-5 shadow-2xl">
           <div className="flex flex-col md:flex-row items-center gap-6">
-            {/* Album Art */}
             <div className="relative w-24 h-24 rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 flex-shrink-0 flex items-center justify-center shadow-lg">
               {currentTrack?.pic ? (
                 <img
@@ -317,7 +307,6 @@ export default function MusicSection() {
               )}
             </div>
 
-            {/* Title & Artist */}
             <div className="flex-1 min-w-0 text-center md:text-left space-y-1.5">
               <h4 className="text-xl font-bold text-white truncate">
                 {currentTrack ? currentTrack.name : 'No track playing'}
@@ -331,7 +320,6 @@ export default function MusicSection() {
               </div>
             </div>
 
-            {/* Playback Controls */}
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
               <button
                 type="button"
@@ -363,7 +351,6 @@ export default function MusicSection() {
                 <SkipForward size={20} />
               </button>
 
-              {/* Stop Button */}
               <button
                 type="button"
                 onClick={stopMusic}
@@ -374,7 +361,6 @@ export default function MusicSection() {
                 <X size={20} />
               </button>
 
-              {/* Repeat Button */}
               <button
                 type="button"
                 onClick={toggleRepeat}
@@ -389,7 +375,6 @@ export default function MusicSection() {
               </button>
             </div>
 
-            {/* Volume Slider */}
             <div className="flex items-center gap-2.5 w-full md:w-36 pt-2 md:pt-0">
               <button
                 type="button"
@@ -412,7 +397,6 @@ export default function MusicSection() {
             </div>
           </div>
 
-          {/* Scrub Bar & Timeline */}
           <div className="space-y-1.5 pt-2">
             <div className="relative w-full h-2.5 bg-zinc-900 rounded-full overflow-hidden cursor-pointer group">
               <div
@@ -437,7 +421,6 @@ export default function MusicSection() {
         </div>
       </div>
 
-      {/* Music Search & Multi-Source Explorer */}
       <section className="p-6 md:p-8 bg-zinc-900/40 border border-zinc-800/60 rounded-3xl space-y-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div className="flex items-center gap-3">
@@ -450,7 +433,6 @@ export default function MusicSection() {
           </div>
         </div>
 
-        {/* Multi-Source Selector Tabs */}
         <div className="flex flex-wrap items-center gap-2 bg-zinc-950/80 p-2 rounded-2xl border border-zinc-800/80">
           {SOURCES.map((s) => {
             const isSelected = musicSource === s.id;
@@ -472,7 +454,6 @@ export default function MusicSection() {
           })}
         </div>
 
-        {/* Search Input Bar */}
         <form onSubmit={handleSearch} className="flex gap-3">
           <div className="relative flex-1">
             <input
@@ -507,7 +488,6 @@ export default function MusicSection() {
           </button>
         </form>
 
-        {/* Search Results Grid */}
         <div
           onScroll={handleScroll}
           className="space-y-2.5 max-h-[520px] overflow-y-auto pr-1.5 custom-scrollbar"

@@ -1,4 +1,3 @@
-// Consolidated Games Catalog
 import { Activity, Beef, Bird, BookOpen, Bug, Car, Cat, Clock, Crosshair, Dribbble, Droplet, FastForward, Fish, Flame, FlaskConical, Gamepad2, Ghost, Goal, Grid, Heart, LayoutGrid, Moon, Mountain, Music, Phone, PiggyBank, Play, Radiation, Shield, Skull, Snowflake, Spade, Sprout, Sword, Swords, Target, TrendingDown, TrendingUp, Trophy, Users, Zap } from "lucide-react";
 import { Game } from "../types";
 
@@ -141,7 +140,6 @@ export const bankRobbery: Game = {
   url: '/games/bank-robbery/index.html',
   popularity: 70,
 };
-
 
 export const basketRandom: Game = {
   id: 'basket-random',
@@ -610,7 +608,6 @@ export const fnfVsWhitty: Game = {
   keywords: ["fnf", "funkin", "rhythm", "whitty", "mod"],
 };
 
-
 export const fridayNightFunkin: Game = {
   id: 'friday-night-funkin',
   title: "Friday Night Funkin'",
@@ -821,7 +818,6 @@ export const ironLung: Game = {
   url: '/games/iron-lung/index.html',
   popularity: 85
 };
-
 
 export const meteor60Seconds: Game = {
   id: 'meteor-60-seconds',
@@ -1068,7 +1064,6 @@ export const snowRider3d: Game = {
   url: '/games/snow-rider-3d/index.html',
   popularity: 85,
 };
-
 
 export const soccerRandom: Game = {
   id: 'soccer-random',
@@ -1368,7 +1363,6 @@ export const webfishing: Game = {
   url: '/games/webfishing/index.html',
   popularity: 92,
 };
-
 
 export const allGames: Game[] = [
   gtaViceCity,

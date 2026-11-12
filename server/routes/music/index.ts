@@ -12,12 +12,11 @@ import { isYtDlpAvailable, probeYtDlp, ytDlpBinaryPath, ytDlpConfig, ytDlpMaxCon
 
 const musicRouter = express.Router();
 
-// Sources list
 musicRouter.get("/sources", (_req: Request, res: Response) => {
   res.json({
     sources: [
       { id: "deezer", name: "Deezer", description: "Worldwide Pop, Rock, & Electronic", quality: "320k HQ", icon: "headphones" },
-      { id: "octave", name: "Octave", description: "High Fidelity 320kbps MP3 Audio", quality: "320kbps MP3", icon: "zap" },
+      { id: "octave", name: "Apple Music", description: "Every song in the iTunes catalogue, played full length", quality: "320 kbps", icon: "zap" },
       { id: "youtube", name: "YouTube Music", description: "Vast Global Video & Audio Library", quality: "Full Length HD", icon: "youtube" },
       { id: "soundcloud", name: "SoundCloud", description: "Indie, EDM, Hip-Hop & Remixes", quality: "128k MP3", icon: "cloud" }
     ],
@@ -25,7 +24,6 @@ musicRouter.get("/sources", (_req: Request, res: Response) => {
   });
 });
 
-// Search Endpoint (Delegates to source-specific handler)
 musicRouter.get("/search", async (req: Request, res: Response) => {
   const query = ((req.query.keyword || req.query.q || "") as string).trim();
   const source = ((req.query.source || "soundcloud") as string).toLowerCase();
@@ -68,7 +66,6 @@ musicRouter.get("/search", async (req: Request, res: Response) => {
   }
 });
 
-// Trending Endpoint
 musicRouter.get("/trending", async (req: Request, res: Response) => {
   const source = ((req.query.source || "soundcloud") as string).toLowerCase();
   const limit = Math.min(Number(req.query.limit) || 30, 50);
@@ -90,9 +87,7 @@ musicRouter.get("/trending", async (req: Request, res: Response) => {
         break;
       case "soundcloud":
       default:
-        // SoundCloud's search happily returns hour-long album uploads, which is
-        // not what the landing page should open on now that this is the default
-        // source: ask for more than needed and keep the real tracks.
+
         results = (await searchSoundCloud("Trending Pop", limit * 2))
           .filter((song: any) => !song.duration || song.duration <= 20 * 60)
           .slice(0, limit);
@@ -109,7 +104,6 @@ musicRouter.get("/trending", async (req: Request, res: Response) => {
   }
 });
 
-// Backward-compatible Octave endpoints
 musicRouter.get("/octave/search", async (req: Request, res: Response) => {
   const query = ((req.query.keyword || req.query.q || "") as string).trim();
   const limit = Math.min(Number(req.query.limit) || 30, 50);
@@ -131,7 +125,6 @@ musicRouter.get("/octave/trending", async (req: Request, res: Response) => {
   }
 });
 
-// URL Resolution Endpoint (Delegates to source-specific resolver)
 musicRouter.get("/url", async (req: Request, res: Response) => {
   const id = (req.query.id || req.query.songId || "") as string;
   const source = ((req.query.source || "deezer") as string).toLowerCase();
@@ -150,9 +143,6 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
     return res.json(cached);
   }
 
-  // One deadline for the whole lookup. A resolver that runs for minutes gets
-  // the request killed by the host (Cloud Run answers 503), so the budget is
-  // spent trying, not waiting: when it expires the preview is served instead.
   const deadline = Date.now() + RESOLVE_BUDGET_MS;
 
   try {
@@ -177,8 +167,6 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
       return null;
     });
 
-    // Hard guard: even a resolver that ignores its deadline cannot hold the
-    // connection open past the budget.
     let guardTimer: ReturnType<typeof setTimeout> | undefined;
     const guard = new Promise<null>((resolve) => {
       guardTimer = setTimeout(() => resolve(null), RESOLVE_BUDGET_MS + 3000);
@@ -195,14 +183,11 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
         duration: resolved.duration || duration,
         streamUrl: `/api/music/stream?url=${encodeURIComponent(resolved.url)}`
       };
-      // A preview is a negative result: remember it briefly so the next click
-      // answers instantly instead of paying the budget again, but not so long
-      // that a fixed source stays broken for the rest of the session.
+
       setCache(cacheKey, result, resolved.isFullLength ? undefined : 5 * 60 * 1000);
       return res.json(result);
     }
 
-    // Preview URL fallback if available
     if (previewUrl && previewUrl.startsWith("http")) {
       const result = {
         url: previewUrl,
@@ -234,18 +219,6 @@ musicRouter.get("/url", async (req: Request, res: Response) => {
   }
 });
 
-/**
- * Diagnostics: why did this track resolve the way it did?
- *
- * "It plays 30 seconds on the deployed site but not here" is otherwise a
- * guessing game, because the answer depends on the host's IP, on whether
- * yt-dlp is installed, and on which catalog has a verified copy. One request
- * reports all three: yt-dlp presence, what each backend found, and which gate
- * rejected each candidate.
- *
- *   /api/music/debug?name=SPIN&artist=KROI&duration=305
- *   /api/music/debug?name=SPIN&artist=KROI&duration=305&videoId=<11 chars>
- */
 musicRouter.get("/debug", async (req: Request, res: Response) => {
   const name = ((req.query.name || req.query.title || "") as string).trim();
   const artist = ((req.query.artist || "") as string).trim();
@@ -288,8 +261,6 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
     }
   };
 
-  // The catalogs are independent, so they are searched at the same time; one
-  // after another this route alone would spend 8s per backend.
   const [saavn, youtube, soundcloud] = await Promise.all([
     probe("saavn", (deadline) => searchSaavn(query, deadline)),
     probe("youtube", async (deadline) =>
@@ -309,9 +280,6 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
     ),
   ]);
 
-  // With no videoId supplied, test the best verified YouTube copy, so one
-  // request answers "can this host extract audio at all?" without the caller
-  // having to dig an 11-character id out of the search results first.
   const autoVideoId: string | undefined = Array.isArray(youtube?.candidates)
     ? youtube.candidates.find((candidate: any) => candidate.accepted && candidate.videoId)?.videoId
     : undefined;
@@ -345,7 +313,6 @@ musicRouter.get("/debug", async (req: Request, res: Response) => {
   });
 });
 
-// Audio Stream Proxy with Byte Range Seeking
 const streamProxyHandler = async (req: Request, res: Response) => {
   const targetUrl = req.query.url as string;
   if (!targetUrl) {
@@ -395,9 +362,6 @@ const streamProxyHandler = async (req: Request, res: Response) => {
     const { Readable } = await import("node:stream");
     const nodeStream = Readable.fromWeb(upstream.body as any);
 
-    // A listener that seeks, skips or closes the tab tears the response down
-    // mid-pipe. Without these handlers that surfaces as an uncaught 'error'
-    // event and takes the whole server with it.
     nodeStream.on("error", () => {
       abortCtrl.abort();
       if (!res.writableEnded) res.end();
@@ -418,7 +382,6 @@ const streamProxyHandler = async (req: Request, res: Response) => {
 musicRouter.get("/stream", streamProxyHandler);
 musicRouter.get("/proxy", streamProxyHandler);
 
-// Lyrics Provider
 musicRouter.get("/lyrics", async (req: Request, res: Response) => {
   const title = (req.query.title || req.query.name || "") as string;
   const artist = (req.query.artist || "") as string;

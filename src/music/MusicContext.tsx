@@ -88,7 +88,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [parsedLyrics, setParsedLyrics] = useState<{ time: number; text: string }[]>([]);
   const [currentLyricLine, setCurrentLyricLine] = useState('');
 
-  // Watchdog timer: ensure isLoadingAudio never gets stuck permanently
   useEffect(() => {
     if (!isLoadingAudio) return;
     const timer = setTimeout(() => {
@@ -104,7 +103,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const abortControllerRef = useRef<AbortController | null>(null);
   const warmedUrlRef = useRef<string | null>(null);
 
-  // Sync refs to avoid stale closures inside event listeners
   const playlistRef = useRef<MusicTrack[]>(playlist);
   const currentTrackRef = useRef<MusicTrack | null>(currentTrack);
   const isRepeatingRef = useRef<boolean>(isRepeating);
@@ -117,11 +115,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     currentTrackRef.current = currentTrack;
   }, [currentTrack]);
 
-  // Persist the track *including* the stream that was resolved for it. The play
-  // path saves the raw track before resolution, so after a reload the mini
-  // player knew the cover and the title but had no audio URL — every press of
-  // play re-resolved it from scratch (0.5s for SoundCloud, several seconds for
-  // the full-length catalogs).
   useEffect(() => {
     if (currentTrack) {
       storage.setItem('app-music-current-track', JSON.stringify(currentTrack));
@@ -133,7 +126,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     storage.setItem('app-music-repeat', String(isRepeating));
   }, [isRepeating]);
 
-  // Advance to next track in queue
   const nextTrack = () => {
     const list = playlistRef.current;
     if (!list || list.length === 0) return;
@@ -144,7 +136,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     playTrack(list[nextIdx]);
   };
 
-  // Play previous track in queue
   const prevTrack = () => {
     const list = playlistRef.current;
     if (!list || list.length === 0) return;
@@ -155,12 +146,10 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     playTrack(list[prevIdx]);
   };
 
-  // Toggle repeat mode
   const toggleRepeat = () => {
     setIsRepeating(prev => !prev);
   };
 
-  // Initialize audio element
   useEffect(() => {
     const audio = new Audio();
     audio.preload = 'auto';
@@ -262,13 +251,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Warm the restored track once, without playing it.
-  //
-  // A restored track shows up in the mini player before any audio is attached,
-  // so pressing play paid for the entire chain on the click: resolve -> HLS
-  // playlist (27KB) -> init segment -> first fragment. Measured on SoundCloud
-  // that is ~1.4s of silence. Attaching the saved URL here lets the browser
-  // buffer it while the page is idle, so the click only has to resume.
   useEffect(() => {
     const audio = audioRef.current;
     const savedUrl = currentTrackRef.current?.url;
@@ -287,8 +269,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       hlsRef.current = hls;
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data.fatal) return;
-        // Signed stream URLs expire (SoundCloud's in ~a day). Leave the element
-        // cold so the first click re-resolves instead of failing silently.
+
         hls.destroy();
         if (hlsRef.current === hls) hlsRef.current = null;
         audio.removeAttribute('src');
@@ -304,7 +285,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     audio.addEventListener('error', () => audio.removeAttribute('src'), { once: true });
   }, []);
 
-  // Update volume
   const setVolume = (vol: number) => {
     const clamped = Math.max(0, Math.min(1, vol));
     setVolumeState(clamped);
@@ -314,7 +294,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Seek
   const seek = (time: number) => {
     if (audioRef.current && isFinite(time)) {
       audioRef.current.currentTime = time;
@@ -322,7 +301,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Parse lyrics LRC
   useEffect(() => {
     if (!lyrics) {
       setParsedLyrics([]);
@@ -352,7 +330,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setParsedLyrics(result);
   }, [lyrics]);
 
-  // Sync current lyric line
   useEffect(() => {
     if (parsedLyrics.length === 0) {
       setCurrentLyricLine('');
@@ -370,7 +347,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     setCurrentLyricLine(active);
   }, [currentTime, parsedLyrics]);
 
-  // Play audio source with HLS or native audio support
   const applyAudioSourceAndPlay = async (audioUrl: string, expectedRequestId?: number): Promise<boolean> => {
     if (!audioRef.current) return false;
     if (expectedRequestId !== undefined && playRequestIdRef.current !== expectedRequestId) {
@@ -382,7 +358,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       hlsRef.current = null;
     }
 
-    // Reset audio element state before loading new source
     audioRef.current.pause();
     audioRef.current.removeAttribute('src');
 
@@ -478,7 +453,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    // Standard Direct Audio (MP3 / AAC / WAV)
     return new Promise<boolean>((resolve) => {
       if (!audioRef.current) return resolve(false);
 
@@ -509,7 +483,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }).catch(async (err) => {
         clearTimeout(safetyTimer);
         console.warn('Direct audio play catch, trying proxy fallback:', err);
-        // If direct stream was blocked by browser or network filter, attempt proxy stream
+
         if (!audioUrl.startsWith('/api/music/proxy') && audioUrl.startsWith('http')) {
           try {
             const proxyUrl = `/api/music/proxy?url=${encodeURIComponent(audioUrl)}`;
@@ -539,9 +513,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     });
   };
 
-  // Play track with robust stream resolution, race-condition safety, and instant-stop
   const playTrack = async (track: MusicTrack, newPlaylist?: MusicTrack[]) => {
-    // 1. Immediately abort any in-flight track resolution request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
@@ -551,7 +523,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     const currentRequestId = ++playRequestIdRef.current;
 
-    // 2. IMMEDIATELY STOP PREVIOUS AUDIO so old song stops playing right away
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
@@ -585,9 +556,8 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       let backendStreamUrl = '';
 
       const targetId = track.rawId || track.id;
-      const trackSource = track.source || (String(track.id).startsWith('octave_') ? 'Octave' : 'soundcloud');
+      const trackSource = track.source || (String(track.id).startsWith('octave_') ? 'octave' : 'soundcloud');
 
-      // Resolve full stream if URL is empty or unresolved
       if (!audioUrl || audioUrl.startsWith('/api/music/url')) {
         try {
           const queryParams = new URLSearchParams({
@@ -616,7 +586,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           console.warn('[MusicContext] Backend URL resolve failed, using client fallback:', err);
         }
 
-        // Direct client stream resolution fallback for all sources
         if (!audioUrl) {
           const clientStream = await resolveClientTrackAudio(track);
           if (clientStream.url) {
@@ -633,7 +602,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
       if (playRequestIdRef.current !== currentRequestId) return;
 
-      // Resolve picture if missing
       if (!picUrl || picUrl.startsWith('/api/music/pic')) {
         try {
           const picRes = await fetch(`/api/music/pic?id=${encodeURIComponent(String(targetId))}`, { signal }).catch(() => null);
@@ -651,7 +619,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       let playbackSuccess = false;
       if (audioUrl) {
         playbackSuccess = await applyAudioSourceAndPlay(audioUrl, currentRequestId);
-        // If direct stream fails (e.g. browser CORS restrictions), try the proxy stream route
+
         if (!playbackSuccess && backendStreamUrl && backendStreamUrl !== audioUrl) {
           playbackSuccess = await applyAudioSourceAndPlay(backendStreamUrl, currentRequestId);
           if (playbackSuccess) {
@@ -660,7 +628,6 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         }
       }
 
-      // If main audio resolution failed or was empty, fall back directly to previewUrl if present
       if (!playbackSuccess && track.previewUrl && audioUrl !== track.previewUrl) {
         if (playRequestIdRef.current === currentRequestId) {
           audioUrl = track.previewUrl;
@@ -685,7 +652,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
-        return; // Normal abort when user clicked another song
+        return;
       }
       console.error('Failed to play audio:', err);
       if (playRequestIdRef.current === currentRequestId) {

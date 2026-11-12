@@ -240,7 +240,7 @@
   <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script>
-    // Built-in Inline SVG Icon Polyfill: ensures 100% icon rendering even if external CDNs are blocked by Google Apps Script / School network
+
     (function() {
       var iconMap = {
         'terminal': '<path d="m4 17 6-6-6-6"/><path d="M12 19h8"/>',
@@ -294,7 +294,7 @@
   </script>
 
   <style>
-    /* Complete Built-in Standalone CSS Framework (works 100% offline & without Tailwind CDN) */
+    
     *, ::before, ::after {
       box-sizing: border-box;
       border-width: 0;
@@ -555,7 +555,6 @@
       justify-content: center !important;
     }
 
-    /* Scrollbar and Glow Styles */
     ::-webkit-scrollbar {
       width: 10px;
       height: 10px;
@@ -602,7 +601,6 @@
       }
     }
 
-    
     .line-clamp-2 {
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -998,10 +996,8 @@
     </div>
   </div>
 
-
   <script>
   function initApp() {
-
     const COVER_BASE = "https://cdn.jsdelivr.net/gh/freebuisness/covers@main";
     const HTML_BASE = "https://cdn.jsdelivr.net/gh/freebuisness/html@main";
 
@@ -1041,7 +1037,6 @@
     const creditsModal = document.getElementById("credits-modal");
     const creditsCloseBtn = document.getElementById("credits-close-btn");
     const creditsFooterCloseBtn = document.getElementById("credits-footer-close-btn");
-
 
     const collectionsGrid = document.getElementById("collections-grid");
     const headerLogoContainer = document.getElementById("header-logo-container");
@@ -1413,7 +1408,6 @@
           lineIdx++;
           setTimeout(renderLine, 400 + Math.random() * 200);
         } else {
-
           const promptElem = document.createElement("div");
           promptElem.className = "flex items-start group relative mt-2 text-zinc-500 font-bold select-none";
           promptElem.innerHTML = `<span class="mr-2">&gt;</span><div class="w-2 h-5 bg-[#ff4a4a] cursor-blink shadow-[0_0_5px_rgba(255,74,74,0.6)] rounded-sm"></div>`;
@@ -1495,7 +1489,6 @@
         let currentUrl = targetUrl;
         let html = null;
 
-        // Recursive unwrapping (up to 3 levels) for wrapper pages like CVK
         for (let depth = 0; depth < 3; depth++) {
           const fetched = await fetchHtml(currentUrl);
           if (!fetched) break;
@@ -1534,7 +1527,6 @@
             '$1@main$3'
           );
 
-          // Map blocked jsdelivr genizy repositories to content-loader proxy
           html = html.replace(
             /https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/genizy\/([^/@]+)(?:@([^\/'" >]+))?\//gi,
             (_match, repo, branch) => {
@@ -1543,8 +1535,8 @@
             }
           );
 
-          html = html.replace(new RegExp('<script[^>]*src="[^"]*arc\\.io[^"]*"[^>]*><' + '/script>', 'gi'), '<!-- stripped arc.io -->');
-          html = html.replace(new RegExp('<script[^>]*src="[^"]*googletagmanager\\.com[^"]*"[^>]*><' + '/script>', 'gi'), '<!-- stripped analytics manager -->');
+          html = html.replace(new RegExp('<script[^>]*src="[^"]*arc\\.io[^"]*"[^>]*><' + '/script>', 'gi'), '');
+          html = html.replace(new RegExp('<script[^>]*src="[^"]*googletagmanager\\.com[^"]*"[^>]*><' + '/script>', 'gi'), '');
           html = html.replace(/gtag\s*\([^)]*\);?/gi, '');
           html = html.replace(/src=["']\/js\/main\.js["']/gi, 'src="data:text/javascript,console.log(\'main.js loaded\')"');
 
@@ -1643,8 +1635,6 @@
       iframe.src = targetUrl;
     }
 
-    
-    
         function decodeB64Data(b64) {
       try {
         const bin = atob(b64);
@@ -2327,7 +2317,6 @@
       return "Are you sure you want to close this page? Any unsaved progress or changes may be lost.";
     });
 
-    // Fake Schoology Cloaking Screen Auto-Disappearance (after 3 seconds or on click/keypress)
     let fakeDismissed = false;
     function dismissFakeScreen() {
       if (fakeDismissed) return;
@@ -2356,10 +2345,8 @@
       } catch(e) {}
     }
 
-    // Dismiss on timeout (3s)
     setTimeout(dismissFakeScreen, 3000);
 
-    // Dismiss on click or any keypress
     window.addEventListener('click', dismissFakeScreen, { once: true });
     window.addEventListener('keydown', dismissFakeScreen, { once: true });
     window.addEventListener('touchstart', dismissFakeScreen, { once: true });
@@ -2385,7 +2372,6 @@
     } catch(e) {}
   }
 
-  // Self-executing safeguard: dismiss fake screen after 3s even if initApp is blocked or delayed
   setTimeout(function() {
     try {
       var scr = document.getElementById('fake-login-screen');

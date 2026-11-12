@@ -8,8 +8,6 @@ export interface ContentFrameProps extends React.IframeHTMLAttributes<HTMLIFrame
   reloadKey?: number;
 }
 
-// Keep the last few prepared documents so pressing reload on a game does not
-// refetch it. Bounded: a handful of these pages run to hundreds of KB.
 const HTML_CACHE_LIMIT = 8;
 const gameHtmlCache = new Map<string, string>();
 
@@ -77,7 +75,6 @@ export function normalizeEmbedUrl(url: string | undefined | null): string {
   if (!url || typeof url !== 'string') return '';
   const trimmed = url.trim();
 
-  // YouTube normalization (watch, shorts, youtu.be, embed)
   if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be')) {
     const ytMatch = trimmed.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/|v\/))([a-zA-Z0-9_-]{11})/);
     if (ytMatch && ytMatch[1]) {
@@ -85,7 +82,6 @@ export function normalizeEmbedUrl(url: string | undefined | null): string {
     }
   }
 
-  // TikTok normalization (video links, v, embed)
   if (trimmed.includes('tiktok.com')) {
     const ttMatch = trimmed.match(/tiktok\.com\/(?:@[^\/]+\/video\/|v\/|embed\/v2\/|embed\/v3\/|embed\/|player\/v1\/)(\d+)/i) ||
                     trimmed.match(/tiktok\.com\/.*\/(\d+)/i);
@@ -110,7 +106,6 @@ export function isLocalGame(url: string | undefined | null): boolean {
 
 const GAME_ENGINE_MARKERS = ['<canvas', 'data.unityweb', 'Module=', 'GODOT_CONFIG', 'ruffle', 'kaboom(', 'Phaser.'];
 
-/** Find the real game document behind a wrapper page (up to 3 hops). */
 async function unwrapDocument(targetUrl: string): Promise<{ html: string; url: string } | null> {
   let currentUrl = targetUrl;
 
@@ -127,8 +122,6 @@ async function unwrapDocument(targetUrl: string): Promise<{ html: string; url: s
       return page;
     }
     try {
-      // Wrapper pages often iframe the real game one level down; follow it
-      // relative to the document we just read.
       currentUrl = cleanGameUrl(new URL(innerSrc, page.url).href);
     } catch (urlErr) {
       return page;
@@ -139,9 +132,6 @@ async function unwrapDocument(targetUrl: string): Promise<{ html: string; url: s
 }
 
 export default function ContentFrame({ src, srcDoc, reloadKey, allow, allowFullScreen = true, ...props }: ContentFrameProps) {
-  // A document we fetched and re-typed, handed to the frame through srcdoc.
-  // The frame never navigates for these, so a CDN that answers `text/plain`
-  // (jsdelivr, with nosniff) or `X-Frame-Options: DENY` cannot break it.
   const [inlineDoc, setInlineDoc] = useState<string | undefined>(srcDoc);
   const [frameSrc, setFrameSrc] = useState<string | undefined>(undefined);
 
@@ -160,8 +150,6 @@ export default function ContentFrame({ src, srcDoc, reloadKey, allow, allowFullS
     const targetUrl = normalizeEmbedUrl(src);
     if (!targetUrl) return;
 
-    // Video embeds and our own games are already served with the correct type
-    // by a host that allows framing, so they load natively - no fetching.
     if (isVideoEmbed(targetUrl) || isLocalGame(targetUrl)) {
       setInlineDoc(undefined);
       setFrameSrc(targetUrl);
@@ -182,14 +170,11 @@ export default function ContentFrame({ src, srcDoc, reloadKey, allow, allowFullS
       if (cancelled) return;
 
       if (!resolved) {
-        // Nothing fetched: let the browser try the URL directly as a last resort.
         setInlineDoc(undefined);
         setFrameSrc(targetUrl);
         return;
       }
 
-      // The document is ours to run; its files load from the repo's Pages site
-      // when it has one, because Pages types scripts/wasm for execution.
       const baseHref = assetBaseUrl(resolved.url) ?? deriveBaseHref(resolved.html, resolved.url);
       const prepared = rewriteGameHtml(resolved.html, { baseHref });
       cachePut(targetUrl, prepared);

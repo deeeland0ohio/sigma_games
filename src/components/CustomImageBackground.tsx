@@ -90,4 +90,3 @@ export function CustomImageBackground({ config }: CustomImageBackgroundProps) {
 }
 
 export default CustomImageBackground;
-

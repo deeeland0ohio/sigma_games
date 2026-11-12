@@ -16,9 +16,9 @@ export default function BackgroundManager() {
 
   useEffect(() => {
     const checkGameActive = () => {
-      const hasGamePath = window.location.hash.includes('#/play/') || 
+      const hasGamePath = window.location.hash.includes('#/play/') ||
                            window.location.hash.includes('#/external-player');
-      
+
       const hasGameIframe = !!(
         document.getElementById('game-iframe') ||
         document.getElementById('ugs-iframe') ||
@@ -34,7 +34,6 @@ export default function BackgroundManager() {
 
     checkGameActive();
 
-    // Check periodically for fullscreen iframe overlays
     const interval = setInterval(checkGameActive, 250);
 
     window.addEventListener('hashchange', checkGameActive);
@@ -51,12 +50,10 @@ export default function BackgroundManager() {
     return <div className="fixed inset-0 bg-black -z-50" />;
   }
 
-  // Scale 1-100 to 0.02-2.0 multiplier
   const powerMultiplier = simulationPower / 50;
-  // Multi-color palette for backgrounds with multiple color elements
+
   const multiColorPalette = colors.palette || [colors.hexPrimary, colors.hexSecondary, colors.hexTertiary, colors.hexQuaternary].filter(Boolean);
-  
-  // Matrix Flow and 3D Dots are single-color backgrounds unless on the Rainbow theme
+
   const singleOrRainbowPalette = theme === 'rainbow' ? colors.palette : undefined;
 
   if (background === 'vanta-dots') {
@@ -74,7 +71,7 @@ export default function BackgroundManager() {
   if (background === 'matrix') {
     return <MatrixBackground color={colors.hexMatrix} palette={singleOrRainbowPalette} power={powerMultiplier} config={backgroundConfig.matrix} />;
   }
-  
+
   if (background === 'black-hole') {
     return <BlackHoleBackground color1={colors.hexPrimary} color2={colors.hexSecondary} color3={colors.hexTertiary} color4={colors.hexQuaternary} palette={multiColorPalette} power={powerMultiplier} config={backgroundConfig.blackHole} />;
   }

@@ -6,13 +6,13 @@ interface MatrixConfig {
   density: number;
 }
 
-export default function MatrixBackground({ 
-  color, 
+export default function MatrixBackground({
+  color,
   palette,
   power = 1.0,
   config = { speed: 50, size: 50, density: 50 }
-}: { 
-  color: string, 
+}: {
+  color: string,
   palette?: string[],
   power?: number,
   config?: MatrixConfig
@@ -44,7 +44,7 @@ export default function MatrixBackground({
     let width = window.innerWidth;
     let height = window.innerHeight;
     let dpr = window.devicePixelRatio || 1;
-    
+
     canvas.style.width = width + 'px';
     canvas.style.height = height + 'px';
     canvas.width = Math.floor(width * dpr);
@@ -74,15 +74,15 @@ export default function MatrixBackground({
       opacity: number;
       color: string;
     }
-    
+
     let drops: Drop[] = [];
 
     const activePalette = (palette && palette.length > 0) ? palette : [color];
-    
+
     const createDrop = (yStart = -20): Drop => {
       const baseSpeed = (2 + Math.random() * 3);
       const dropColor = activePalette[Math.floor(Math.random() * activePalette.length)];
-      
+
       return {
         x: Math.random() * width,
         y: yStart,
@@ -112,13 +112,13 @@ export default function MatrixBackground({
       width = window.innerWidth;
       height = window.innerHeight;
       dpr = window.devicePixelRatio || 1;
-      
+
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       ctx.scale(dpr, dpr);
-      
+
       initDrops();
     };
     window.addEventListener('resize', handleResize);
@@ -128,9 +128,8 @@ export default function MatrixBackground({
     const animate = () => {
       const { speed, size } = configRef.current;
       const speedFactor = (speed / 50) * 0.6;
-      const fontSize = 12 + (size / 100) * 16; // Range 12-28, default ~20
+      const fontSize = 12 + (size / 100) * 16;
 
-      // Fade effect for trails
       ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
       ctx.fillRect(0, 0, width, height);
 
@@ -139,36 +138,33 @@ export default function MatrixBackground({
 
       for (let i = 0; i < drops.length; i++) {
         const drop = drops[i];
-        
+
         const currentTargetSpeed = drop.speed * speedFactor;
         const speedMult = powerRef.current === 0 ? 0.4 : powerRef.current;
-        
-        // Gravity / natural flow
+
         drop.vy += 0.05 * 0.6 * speedMult;
         if (drop.vy > currentTargetSpeed * 1.5 * speedMult) drop.vy = currentTargetSpeed * 1.5 * speedMult;
-        
-        // Mouse interaction (bounce off cursor like water)
+
         const dx = drop.x - mouse.x;
         const dy = drop.y - mouse.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const maxDist = 120 * powerRef.current; 
-        
+        const maxDist = 120 * powerRef.current;
+
         if (dist < maxDist && powerRef.current > 0) {
           const force = (maxDist - dist) / maxDist;
           const angle = Math.atan2(dy, dx);
           drop.vx += Math.cos(angle) * force * 1.5 * powerRef.current;
           drop.vy += Math.sin(angle) * force * 1.5 * powerRef.current;
         }
-        
-        drop.vx *= 0.96; 
+
+        drop.vx *= 0.96;
         drop.x += drop.vx;
         drop.y += drop.vy;
-        
+
         if (drop.y > height + 20 || drop.x < -20 || drop.x > width + 20) {
           Object.assign(drop, createDrop(-20));
         }
-        
-        // Draw
+
         ctx.globalAlpha = drop.opacity;
         ctx.fillStyle = drop.color;
         ctx.fillText(drop.char, drop.x, drop.y);
@@ -189,8 +185,8 @@ export default function MatrixBackground({
   }, [color, palette]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       className="fixed inset-0 -z-10 pointer-events-none bg-zinc-950"
     />
   );

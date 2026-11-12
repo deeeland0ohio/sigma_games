@@ -30,7 +30,7 @@ function rasterizeSvgToTexture(svgString: string, onReady?: (tex: THREE.Texture)
   canvas.width = 256;
   canvas.height = 256;
   const ctx = canvas.getContext('2d');
-  
+
   const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
   const blobUrl = URL.createObjectURL(blob);
   const img = new Image();
@@ -52,7 +52,6 @@ function rasterizeSvgToTexture(svgString: string, onReady?: (tex: THREE.Texture)
   return texture;
 }
 
-// Helper to safely load images across CORS & different protocols
 function tryFetchImageBlob(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
     fetch(url)
@@ -87,13 +86,11 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
 
   const trimmedUrl = url.trim();
 
-  // 1. Inline SVG XML
   if (trimmedUrl.startsWith('<svg') || trimmedUrl.startsWith('<?xml')) {
     rasterizeSvgToTexture(trimmedUrl, onLoad);
     return;
   }
 
-  // 2. SVG Data URI
   if (trimmedUrl.startsWith('data:image/svg+xml')) {
     try {
       if (trimmedUrl.includes('base64,')) {
@@ -107,7 +104,6 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
         return;
       }
     } catch {
-      // fallback to standard image processing
     }
   }
 
@@ -135,7 +131,6 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
     }
   };
 
-  // 3. Local path, blob URL, or data URL
   if (trimmedUrl.startsWith('data:') || trimmedUrl.startsWith('blob:') || trimmedUrl.startsWith('/')) {
     try {
       const img = await loadImageElement(trimmedUrl);
@@ -147,7 +142,6 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
     }
   }
 
-  // 4. SVG external URL
   const isSvgUrl = trimmedUrl.endsWith('.svg') || trimmedUrl.includes('.svg?') || trimmedUrl.includes('favicon.svg');
   if (isSvgUrl) {
     try {
@@ -161,7 +155,6 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
         return;
       }
     } catch {
-      // Try proxy for SVG
     }
 
     try {
@@ -175,11 +168,9 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
         return;
       }
     } catch {
-      // Fall through to raster loader
     }
   }
 
-  // 5. Standard / External image URLs - try direct fetch, then direct load, then proxies
   const candidateUrls = [
     trimmedUrl,
     `https://images.weserv.nl/?url=${encodeURIComponent(trimmedUrl)}&output=png`,
@@ -189,7 +180,6 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
 
   for (const candidate of candidateUrls) {
     try {
-      // Try fetching as blob first to completely avoid canvas CORS issues
       const blobUrl = await tryFetchImageBlob(candidate);
       const img = await loadImageElement(blobUrl);
       makeTextureFromImage(img);
@@ -201,19 +191,17 @@ async function loadCustomTexture(url: string, onLoad: (texture: THREE.Texture) =
         makeTextureFromImage(img);
         return;
       } catch {
-        // Continue to next candidate
       }
     }
   }
 
-  // Final fallback
   rasterizeSvgToTexture(DEFAULT_FAVICON_SVG, onLoad);
 }
 
-export function CustomImageDotsBackground({ 
-  backgroundColor = '#09090b', 
-  config, 
-  power = 1 
+export function CustomImageDotsBackground({
+  backgroundColor = '#09090b',
+  config,
+  power = 1
 }: CustomImageDotsBackgroundProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const configRef = useRef(config);
@@ -279,8 +267,6 @@ export function CustomImageDotsBackground({
     const basePositions: number[] = [];
     const gridScale = 50;
 
-    // Generate row-by-row along Z axis (from furthest -gridScale to closest +gridScale)
-    // This maintains natural back-to-front rendering order so back dots never overlap front dots
     for (let j = -gridScale; j <= gridScale; j++) {
       for (let i = -gridScale; i <= gridScale; i++) {
         const x = i * spacing + spacing / 2;
@@ -362,7 +348,6 @@ export function CustomImageDotsBackground({
       const currentConfig = configRef.current;
       const currentPower = powerRef.current ?? 1;
 
-      // Update texture if imageUrl changed dynamically
       const activeImageUrl = currentConfig?.imageUrl || 'https://sigma-games.dev/favicon.svg';
       if (activeImageUrl !== lastLoadedUrl) {
         lastLoadedUrl = activeImageUrl;
@@ -392,14 +377,12 @@ export function CustomImageDotsBackground({
       const posAttr = geometry.attributes.position as THREE.BufferAttribute;
       const positionsArr = posAttr.array as Float32Array;
 
-      // Parallax camera sway
       const targetCamX = currentMouseX * 100;
       const targetCamY = 150 + (-currentMouseY * 50);
       camera.position.x += (targetCamX - camera.position.x) * 0.05;
       camera.position.y += (targetCamY - camera.position.y) * 0.05;
       camera.lookAt(camera.position.x * 0.5, 0, camera.position.z - 800);
 
-      // Update splashes
       for (let i = splashes.length - 1; i >= 0; i--) {
         splashes[i].time += 0.04 * Math.max(0.5, speedMultiplier);
         if (splashes[i].time > Math.PI) {
@@ -467,7 +450,6 @@ export function CustomImageDotsBackground({
         try {
           containerRef.current.removeChild(renderer.domElement);
         } catch {
-          // ignore
         }
       }
     };

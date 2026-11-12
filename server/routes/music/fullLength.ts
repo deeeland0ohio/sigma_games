@@ -7,35 +7,12 @@ import {
   SoundCloudCandidate,
 } from "./soundcloudApi";
 
-/**
- * Full-length audio backends.
- *
- * Deezer and iTunes only hand out 30-second previews, and YouTube audio often
- * cannot be extracted from a server IP, so full tracks usually have to come
- * from a second catalog. That is acceptable as long as the audio is verifiably
- * the same recording as the metadata the user clicked — which is what
- * `isSameRecording` enforces. No candidate, no substitution.
- *
- * Everything here runs under ONE deadline (`MUSIC_RESOLVE_BUDGET_MS`, 18s).
- * That matters: the three catalogs barely know about each other, so searching
- * them one after another meant saavn's 2 queries × 2 endpoints × 6s, then an
- * unbounded YouTube search, then yt-dlp twice per candidate for 25s and 15s,
- * then SoundCloud — four to five minutes for a track that was never going to
- * resolve. The host answers 503/504 long before that, which is exactly what a
- * hanging `GET /api/music/url` looked like. Now the catalogs are searched in
- * parallel, extraction gets whatever time is left, and the caller gets a
- * straight answer inside the budget so it can fall back to the preview.
- */
-
-/** Wall-clock budget for a whole full-length lookup, including extraction. */
 export const RESOLVE_BUDGET_MS = Math.max(4000, Number(process.env.MUSIC_RESOLVE_BUDGET_MS) || 18000);
 
-/** Time a single HTTP step may take, never past the deadline. */
 function stepTimeout(deadline: number, capMs: number): number {
   return Math.max(0, Math.min(capMs, deadline - Date.now()));
 }
 
-/** How much of the budget the (parallel) catalog searches may use. */
 function searchWindow(end: number): number {
   const left = Math.max(0, end - Date.now());
   return Date.now() + Math.max(2500, Math.round(left * 0.55));
@@ -90,13 +67,11 @@ export async function searchSaavn(query: string, deadline: number): Promise<Saav
         .filter((c: SaavnCandidate | null): c is SaavnCandidate => Boolean(c) && Boolean(c!.downloadUrls.length));
       if (candidates.length > 0) return candidates;
     } catch {
-      // try the next endpoint
     }
   }
   return [];
 }
 
-/** Best available file for a saavn candidate: 320kbps when offered. */
 function pickAudioUrl(candidate: SaavnCandidate): string {
   const preferred = candidate.downloadUrls.find((d) => d.quality.includes("320"));
   return (preferred || candidate.downloadUrls[candidate.downloadUrls.length - 1]).url;
@@ -113,7 +88,6 @@ function saavnResult(candidate: SaavnCandidate, identity: TrackIdentity): Stream
   };
 }
 
-/** Verified saavn matches for this identity, best duration agreement first. */
 export async function collectSaavnCandidates(
   identity: TrackIdentity,
   deadline: number
@@ -136,7 +110,6 @@ export async function collectSaavnCandidates(
   return [];
 }
 
-/** Prefer official artist channels and topic channels over reuploads. */
 function channelScore(author: string): number {
   const lower = author.toLowerCase();
   if (lower.endsWith("- topic")) return 0;
@@ -144,11 +117,6 @@ function channelScore(author: string): number {
   return 2;
 }
 
-/**
- * Verified YouTube videos of the same recording, best channel first.
- * No extraction happens here — that is the expensive part and is done later,
- * in order, while the deadline allows.
- */
 export async function collectYouTubeCandidates(
   identity: TrackIdentity,
   deadline: number
@@ -173,15 +141,6 @@ export async function collectYouTubeCandidates(
   return verified.sort((a, b) => channelScore(a.author) - channelScore(b.author));
 }
 
-/**
- * Verified SoundCloud uploads of the same recording.
- *
- * These are user uploads, so the bar is higher than for a licensed catalog:
- * the candidate title must contain every word of the real title (uploads
- * append the artist, e.g. "Let Down - Radiohead"), the artist must be
- * credited, and the length must agree within 2%. A reupload of the real
- * recording passes; a different take, edit or cover does not.
- */
 export async function collectSoundCloudCandidates(
   identity: TrackIdentity,
   deadline: number
@@ -208,8 +167,7 @@ export async function collectSoundCloudCandidates(
       ) {
         continue;
       }
-      // Tighter length window than the general gate: an edit that is 8
-      // seconds short is a different recording, not a remaster.
+
       if (target > 0) {
         const drift = Math.abs(target - candidate.duration) / target;
         if (drift > 0.02) continue;
@@ -225,11 +183,6 @@ export async function collectSoundCloudCandidates(
   });
 }
 
-/**
- * Last resort for a full track: search every backend at once, then extract in
- * order of audio quality while the deadline holds. Returns null when nothing
- * can be proven to be the same recording, or when the budget runs out.
- */
 export async function resolveFullLengthAudio(
   identity: TrackIdentity,
   deadline?: number
@@ -245,7 +198,6 @@ export async function resolveFullLengthAudio(
     collectSoundCloudCandidates(identity, searchesEnd).catch(() => []),
   ]);
 
-  // Licensed catalog first: it is the highest-quality match when it exists.
   if (saavn[0]) return saavnResult(saavn[0], identity);
 
   for (const item of youtube.slice(0, 2)) {

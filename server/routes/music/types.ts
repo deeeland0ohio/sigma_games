@@ -26,9 +26,8 @@ export interface StreamResolutionResult {
   duration?: number;
 }
 
-// Global In-Memory Cache
 const cache = new Map<string, { data: any; timestamp: number; ttl: number }>();
-const CACHE_TTL = 1000 * 60 * 20; // 20 minutes
+const CACHE_TTL = 1000 * 60 * 20;
 
 export function getCached<T>(key: string): T | null {
   const item = cache.get(key);
@@ -38,7 +37,6 @@ export function getCached<T>(key: string): T | null {
   return null;
 }
 
-/** `ttlMs` overrides the default 20 minutes (used for short-lived negatives). */
 export function setCache(key: string, data: any, ttlMs?: number): void {
   cache.set(key, { data, timestamp: Date.now(), ttl: ttlMs && ttlMs > 0 ? ttlMs : CACHE_TTL });
   if (cache.size > 3000) {
@@ -53,5 +51,3 @@ export function formatSeconds(secs: number): string {
   const s = Math.floor(secs % 60);
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
-
-// Recording-identity checks live in ./match — they are the only matcher now.

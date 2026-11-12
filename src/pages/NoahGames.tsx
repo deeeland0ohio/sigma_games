@@ -21,20 +21,20 @@ export default function NoahGames() {
     try {
       let res = await fetch('https://cdn.jsdelivr.net/gh/NoahsAmazingTutoringHelp/Noahs-Calculus-Tutor@master/games.js')
         .catch(() => fetch('https://cdn.jsdelivr.net/gh/NoahsAmazingTutoringHelp/Noahs-Calculus-Tutor@master/games.js'));
-      
+
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
-      
+
       const text = await res.text();
       if (!text || !text.includes('games')) {
         throw new Error("Invalid response content: does not contain games array");
       }
-      
+
       const fnText = text.replace(/const games\s*=/, "return");
       const gamesArray = (new Function(fnText))();
       if (Array.isArray(gamesArray) && gamesArray.length > 0) {
-        const sorted = [...gamesArray].sort((a, b) => 
+        const sorted = [...gamesArray].sort((a, b) =>
           (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
         );
         setGames(sorted);
@@ -43,7 +43,7 @@ export default function NoahGames() {
       }
     } catch (e) {
       console.error("Failed to fetch Noah games from CDN, falling back to local list:", e);
-      const sorted = [...initialNoahGames].sort((a, b) => 
+      const sorted = [...initialNoahGames].sort((a, b) =>
         (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
       );
       setGames(sorted);
@@ -69,7 +69,7 @@ export default function NoahGames() {
     setSelectedGame(game);
   };
 
-  const filteredGames = games.filter(g => 
+  const filteredGames = games.filter(g =>
     (g.title || g.url).toLowerCase().includes(search.toLowerCase())
   );
   const displayedGames = filteredGames.slice(0, visibleCount);
@@ -108,7 +108,7 @@ export default function NoahGames() {
               const displayName = g.title || formatFileName(g.url.split('/').pop() || g.url);
               const imageSrc = g.image || null;
               const gameId = `noah:${displayName}`;
-              
+
               return (
                 <SourceGameCard
                   key={`${g.url}-${index}`}
@@ -131,14 +131,14 @@ export default function NoahGames() {
                 />
               );
             })}
-            
+
             {displayedGames.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredGames.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -153,7 +153,6 @@ export default function NoahGames() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -209,7 +208,7 @@ export default function NoahGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

@@ -1,16 +1,16 @@
 import React, { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import { storage } from "../utils/storage";
 
-export type Theme = 
-  | 'red-green' 
-  | 'blue-pink' 
-  | 'purple-cyan' 
-  | 'orange-yellow' 
-  | 'monochrome' 
-  | 'neon-green' 
-  | 'cyberpunk' 
-  | 'synthwave' 
-  | 'dracula' 
+export type Theme =
+  | 'red-green'
+  | 'blue-pink'
+  | 'purple-cyan'
+  | 'orange-yellow'
+  | 'monochrome'
+  | 'neon-green'
+  | 'cyberpunk'
+  | 'synthwave'
+  | 'dracula'
   | 'hacker'
   | 'lightspeed-special'
   | 'event-horizon-special'
@@ -18,13 +18,13 @@ export type Theme =
   | 'rainbow'
   | 'custom';
 
-export type BackgroundStyle = 
-  | 'dots' 
-  | 'vanta-dots' 
-  | 'matrix' 
-  | 'black-hole' 
-  | 'lightspeed' 
-  | 'fluid' 
+export type BackgroundStyle =
+  | 'dots'
+  | 'vanta-dots'
+  | 'matrix'
+  | 'black-hole'
+  | 'lightspeed'
+  | 'fluid'
   | 'blank'
   | 'custom-image-dots'
   | 'custom-image-bg';
@@ -115,7 +115,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<Theme>(() => {
     return (storage.getItem('app-theme') as Theme) || 'red-green';
   });
-  
+
   const [background, setBackground] = useState<BackgroundStyle>(() => {
     return (storage.getItem('app-background') as BackgroundStyle) || 'dots';
   });
@@ -220,22 +220,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     storage.setItem('app-cloaking-title', cloakingTitle);
-    
+
     const applyTitle = () => {
       if (!document.getElementById('fake-login-screen')) {
         document.title = cloakingTitle;
       }
     };
-    
+
     applyTitle();
-    
+
     document.addEventListener('app-boot-complete', applyTitle);
     return () => document.removeEventListener('app-boot-complete', applyTitle);
   }, [cloakingTitle]);
 
   useEffect(() => {
     storage.setItem('app-cloaking-icon', cloakingIcon);
-    
+
     const applyIcon = () => {
       if (!document.getElementById('fake-login-screen')) {
         let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
@@ -247,9 +247,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         link.href = cloakingIcon;
       }
     };
-    
+
     applyIcon();
-    
+
     document.addEventListener('app-boot-complete', applyIcon);
     return () => document.removeEventListener('app-boot-complete', applyIcon);
   }, [cloakingIcon]);
@@ -260,7 +260,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     storage.setItem('app-background', background);
-    // Automatically adjust simulation power based on background type
+
     if (background === 'vanta-dots' || background === 'custom-image-dots') {
       setSimulationPower(36);
     } else if (background !== 'blank' && background !== 'custom-image-bg') {
@@ -313,9 +313,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [closePrevention]);
 
   return (
-    <ThemeContext.Provider value={{ 
-      theme, setTheme, 
-      background, setBackground, 
+    <ThemeContext.Provider value={{
+      theme, setTheme,
+      background, setBackground,
       simulationPower, setSimulationPower,
       backgroundConfig, setBackgroundConfig,
       isSettingsOpen, setIsSettingsOpen,
@@ -352,12 +352,12 @@ export function useTheme() {
 
 export function useThemeColors() {
   const { theme, customColors } = useTheme();
-  
+
   const themes: Record<Theme, any> = {
     'red-green': {
       primary: 'text-red-500',
       secondary: 'text-emerald-500',
-      tertiaryBg: 'bg-yellow-500', // Added tertiary color
+      tertiaryBg: 'bg-yellow-500',
       primaryBg: 'bg-red-500',
       secondaryBg: 'bg-emerald-500',
       hoverBorder: 'hover:border-red-500/50',
@@ -374,7 +374,7 @@ export function useThemeColors() {
       popupText: 'text-red-50',
       hexPrimary: 'rgba(239, 68, 68, 0.4)',
       hexSecondary: 'rgba(16, 185, 129, 0.4)',
-      hexMatrix: '#10b981' // emerald-500
+      hexMatrix: '#10b981'
     },
     'blue-pink': {
       primary: 'text-blue-500',
@@ -396,7 +396,7 @@ export function useThemeColors() {
       popupText: 'text-blue-50',
       hexPrimary: 'rgba(59, 130, 246, 0.4)',
       hexSecondary: 'rgba(236, 72, 153, 0.4)',
-      hexMatrix: '#ec4899' // pink-500
+      hexMatrix: '#ec4899'
     },
     'purple-cyan': {
       primary: 'text-purple-500',
@@ -418,7 +418,7 @@ export function useThemeColors() {
       popupText: 'text-purple-50',
       hexPrimary: 'rgba(168, 85, 247, 0.4)',
       hexSecondary: 'rgba(6, 182, 212, 0.4)',
-      hexMatrix: '#06b6d4' // cyan-500
+      hexMatrix: '#06b6d4'
     },
     'orange-yellow': {
       primary: 'text-orange-500',
@@ -440,7 +440,7 @@ export function useThemeColors() {
       popupText: 'text-orange-50',
       hexPrimary: 'rgba(249, 115, 22, 0.4)',
       hexSecondary: 'rgba(234, 179, 8, 0.4)',
-      hexMatrix: '#eab308' // yellow-500
+      hexMatrix: '#eab308'
     },
     'monochrome': {
       primary: 'text-zinc-100',
@@ -462,7 +462,7 @@ export function useThemeColors() {
       popupText: 'text-zinc-50',
       hexPrimary: 'rgba(244, 244, 245, 0.4)',
       hexSecondary: 'rgba(161, 161, 170, 0.4)',
-      hexMatrix: '#f4f4f5' // zinc-100
+      hexMatrix: '#f4f4f5'
     },
     'neon-green': {
       primary: 'text-lime-400',
@@ -484,7 +484,7 @@ export function useThemeColors() {
       popupText: 'text-lime-50',
       hexPrimary: 'rgba(163, 230, 53, 0.4)',
       hexSecondary: 'rgba(16, 185, 129, 0.4)',
-      hexMatrix: '#a3e635' // lime-400
+      hexMatrix: '#a3e635'
     },
     'cyberpunk': {
       primary: 'text-yellow-400',
@@ -506,7 +506,7 @@ export function useThemeColors() {
       popupText: 'text-yellow-50',
       hexPrimary: 'rgba(250, 204, 21, 0.4)',
       hexSecondary: 'rgba(217, 70, 239, 0.4)',
-      hexMatrix: '#facc15' // yellow-400
+      hexMatrix: '#facc15'
     },
     'synthwave': {
       primary: 'text-indigo-500',
@@ -528,7 +528,7 @@ export function useThemeColors() {
       popupText: 'text-indigo-50',
       hexPrimary: 'rgba(99, 102, 241, 0.4)',
       hexSecondary: 'rgba(217, 70, 239, 0.4)',
-      hexMatrix: '#d946ef' // fuchsia-500
+      hexMatrix: '#d946ef'
     },
     'dracula': {
       primary: 'text-purple-400',
@@ -550,7 +550,7 @@ export function useThemeColors() {
       popupText: 'text-purple-50',
       hexPrimary: 'rgba(192, 132, 252, 0.4)',
       hexSecondary: 'rgba(236, 72, 153, 0.4)',
-      hexMatrix: '#c084fc' // purple-400
+      hexMatrix: '#c084fc'
     },
     'hacker': {
       primary: 'text-emerald-500',
@@ -572,7 +572,7 @@ export function useThemeColors() {
       popupText: 'text-emerald-50',
       hexPrimary: 'rgba(16, 185, 129, 0.4)',
       hexSecondary: 'rgba(4, 120, 87, 0.4)',
-      hexMatrix: '#10b981' // emerald-500
+      hexMatrix: '#10b981'
     },
     'lightspeed-special': {
       primary: 'text-cyan-400',
@@ -632,11 +632,11 @@ export function useThemeColors() {
       cursor: 'bg-violet-500',
       popupBg: 'bg-violet-950/90',
       popupText: 'text-violet-50',
-      hexPrimary: 'rgba(139, 92, 246, 0.4)', // violet-500
-      hexSecondary: 'rgba(249, 115, 22, 0.4)', // orange-500
-      hexTertiary: '#fbbf24', // amber-400
-      hexQuaternary: '#e11d48', // rose-600
-      hexMatrix: '#8b5cf6' // violet-500
+      hexPrimary: 'rgba(139, 92, 246, 0.4)',
+      hexSecondary: 'rgba(249, 115, 22, 0.4)',
+      hexTertiary: '#fbbf24',
+      hexQuaternary: '#e11d48',
+      hexMatrix: '#8b5cf6'
     },
     'event-horizon-blue-orange': {
       primary: 'text-blue-400',
@@ -664,11 +664,11 @@ export function useThemeColors() {
       cursor: 'bg-blue-400',
       popupBg: 'bg-blue-950/90',
       popupText: 'text-blue-50',
-      hexPrimary: 'rgba(59, 130, 246, 0.6)', // blue-500
-      hexSecondary: 'rgba(249, 115, 22, 0.6)', // orange-500
-      hexTertiary: '#22d3ee', // cyan-400
-      hexQuaternary: '#fbbf24', // amber-400
-      hexMatrix: '#3b82f6' // blue-500
+      hexPrimary: 'rgba(59, 130, 246, 0.6)',
+      hexSecondary: 'rgba(249, 115, 22, 0.6)',
+      hexTertiary: '#22d3ee',
+      hexQuaternary: '#fbbf24',
+      hexMatrix: '#3b82f6'
     },
     'rainbow': {
       primary: 'text-red-500',
@@ -702,13 +702,13 @@ export function useThemeColors() {
       hexQuaternary: '#22c55e',
       hexMatrix: '#ef4444',
       palette: [
-        '#ef4444', // Red
-        '#f97316', // Orange
-        '#eab308', // Yellow
-        '#22c55e', // Green
-        '#3b82f6', // Blue
-        '#6366f1', // Indigo
-        '#a855f7'  // Violet
+        '#ef4444',
+        '#f97316',
+        '#eab308',
+        '#22c55e',
+        '#3b82f6',
+        '#6366f1',
+        '#a855f7'
       ]
     },
     'custom': {

@@ -32,11 +32,9 @@ function AnalyticsTracker() {
   useEffect(() => {
     const currentPath = location.pathname;
 
-    // Track ONLY the home page
     if (currentPath === '/') {
       const umami = (window as any).umami;
       if (umami && typeof umami.track === 'function') {
-        // Track page view manually
         umami.track();
       }
     }

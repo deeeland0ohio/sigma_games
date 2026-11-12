@@ -7,7 +7,6 @@ const BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 
 const FORWARDED_HEADERS = ['content-length', 'content-range', 'accept-ranges', 'etag', 'last-modified'];
 
-// MIME type lookup helper
 function getMimeType(urlPath: string, headerType: string | null): string {
   const cleanPath = urlPath.split('?')[0].toLowerCase();
   if (cleanPath.endsWith('.wasm')) return 'application/wasm';
@@ -37,7 +36,6 @@ function getMimeType(urlPath: string, headerType: string | null): string {
   return 'text/html; charset=utf-8';
 }
 
-/** jsdelivr refuses some repositories outright; GitHub raw still has them. */
 function mapBlockedRepository(url: string): string {
   const genizyMatch = url.match(/https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/genizy\/([^/@]+)(?:@([^/]+))?\/(.*)/i);
   if (genizyMatch) {
@@ -49,9 +47,6 @@ function mapBlockedRepository(url: string): string {
 }
 
 async function fetchUpstream(url: string, range?: string): Promise<globalThis.Response> {
-  // `identity` matters: Node's fetch decompresses gzip bodies but keeps the
-  // compressed Content-Length header, so forwarding that header would cut the
-  // stream short. Plain bytes make the length we forward truthful.
   const headers: Record<string, string> = { "User-Agent": BROWSER_UA, "Accept-Encoding": "identity" };
   if (range) headers.Range = range;
   return fetch(url, { headers });
@@ -65,7 +60,6 @@ async function fetchWithFallback(
     const url = mapBlockedRepository(targetUrl);
     const resp = await fetchUpstream(url, range);
 
-    // jsdelivr 403s on repos it refuses to serve: retry from GitHub raw.
     if (resp.status === 403 && url.includes('jsdelivr.net/gh/')) {
       const ghMatch = url.match(/https?:\/\/[^/]+\.jsdelivr\.net\/gh\/([^/@]+)\/([^/@]+)(?:@([^/]+))?\/(.*)/i);
       if (ghMatch) {
@@ -78,7 +72,6 @@ async function fetchWithFallback(
       }
     }
 
-    // A repo that renamed its default branch from main to master.
     if (resp.status === 404 && url.includes('raw.githubusercontent.com/') && url.includes('/main/')) {
       const masterUrl = url.replace('/main/', '/master/');
       const masterResp = await fetchUpstream(masterUrl, range);
@@ -110,8 +103,7 @@ async function handleContentLoad(targetUrl: string, req: Request, res: Response)
 
   res.status(response.status);
   res.setHeader('Content-Type', getMimeType(finalUrl, response.headers.get('content-type')));
-  // A server that ignores `identity` hands us an encoded body: its length and
-  // range headers describe the encoded bytes, so they cannot be forwarded.
+
   const encoded = response.headers.get('content-encoding');
   const canDescribeBody = !encoded || encoded === 'identity';
   if (canDescribeBody) {
@@ -129,24 +121,19 @@ async function handleContentLoad(targetUrl: string, req: Request, res: Response)
   res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
   res.removeHeader('X-Frame-Options');
   res.removeHeader('Content-Security-Policy');
-  // `no-transform` keeps the compression middleware out of the way: rewriting
-  // the body would break the byte ranges games rely on to resume big assets.
+
   res.setHeader('Cache-Control', 'public, max-age=3600, no-transform');
 
   if (!response.body) {
     return res.end();
   }
 
-  // Stream instead of buffering: some of these assets are tens of megabytes
-  // (Godot .pck/.wasm, Unity .data) and used to be held entirely in memory
-  // before the first byte was sent.
   const stream = Readable.fromWeb(response.body as any);
   res.on('close', () => stream.destroy());
   stream.on('error', () => res.destroy());
   stream.pipe(res);
 }
 
-// Server-side content loader for query format: /api/content-loader?url=...
 router.get("/content-loader", async (req: Request, res: Response) => {
   try {
     const { url } = req.query;
@@ -167,7 +154,6 @@ router.get("/content-loader", async (req: Request, res: Response) => {
   }
 });
 
-// Path format support: /api/content-loader/raw.githubusercontent.com/... or /api/content-loader/https://...
 router.get("/content-loader/*", async (req: Request, res: Response) => {
   try {
     const fullPath = req.params[0];

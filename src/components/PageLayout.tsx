@@ -15,11 +15,11 @@ interface PageLayoutProps {
   noPadding?: boolean;
 }
 
-export default function PageLayout({ 
-  children, 
-  title, 
-  showBack = false, 
-  backTo = "/", 
+export default function PageLayout({
+  children,
+  title,
+  showBack = false,
+  backTo = "/",
   backText = "Back to Home",
   maxWidth = '6xl',
   noPadding = false
@@ -35,13 +35,12 @@ export default function PageLayout({
     'full': 'w-full max-w-none'
   }[maxWidth];
 
-  const horizontalPadding = noPadding 
-    ? 'px-0' 
+  const horizontalPadding = noPadding
+    ? 'px-0'
     : (maxWidth === 'wide' ? 'px-4 sm:px-8 md:px-[150px]' : 'px-6');
 
   return (
     <div className={`flex flex-col min-h-[100dvh] text-zinc-300 font-sans ${colors.selection}`}>
-      {/* Header */}
       <header className="border-b border-white/[0.08] bg-zinc-950/25 backdrop-blur-md sticky top-0 z-50">
         <div className={`${maxWidthClass} ${horizontalPadding} h-20 flex items-center justify-between`}>
           {showBack ? (
@@ -83,7 +82,6 @@ export default function PageLayout({
         {children}
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-zinc-800 py-8 text-sm text-zinc-500 bg-zinc-950/50 backdrop-blur-sm">
         <div className={`${maxWidthClass} ${horizontalPadding} text-center space-y-1`}>
           <p>© 2026 Sigma Games.</p>

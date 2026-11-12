@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  Bot, Send, Plus, Trash2, Copy, Check, RotateCcw, 
+import {
+  Bot, Send, Plus, Trash2, Copy, Check, RotateCcw,
   ChevronDown, Square, MessageSquare, Download, X, Sparkles, ArrowDown,
   Zap, Globe, AlertTriangle
 } from 'lucide-react';
@@ -110,15 +110,12 @@ const POPULAR_FALLBACK_MODELS: string[] = [
 export default function AiChat() {
   const colors = useThemeColors();
 
-  // Active AI Provider (Default to Groq)
   const [provider, setProvider] = useState<AIProvider>('groq');
   const [isEmisExhausted, setIsEmisExhausted] = useState<boolean>(false);
 
-  // Model Catalogs for each provider
   const [groqModels, setGroqModels] = useState<ModelInfo[]>(GROQ_DEFAULT_MODELS);
   const [emisModels, setEmisModels] = useState<ModelInfo[]>([]);
 
-  // Active models per provider
   const [groqModel, setGroqModel] = useState<string>(() => {
     return sanitizeGroqModel(storage.getItem('ai_groq_model')) || 'openai/gpt-oss-120b';
   });
@@ -133,11 +130,10 @@ export default function AiChat() {
 
   const currentModel = provider === 'groq' ? groqModel : emisModel;
 
-  // Separate Isolated Sessions for Groq Api
   const [groqSessions, setGroqSessions] = useState<ChatSession[]>(() => {
     const saved = storage.getItem('ai_groq_sessions') || storage.getItem('ai_chat_sessions');
     if (saved) {
-      try { 
+      try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(s => ({
@@ -167,11 +163,10 @@ export default function AiChat() {
     return storage.getItem('ai_groq_active_session_id') || groqSessions[0]?.id || 'groq_' + Date.now();
   });
 
-  // Separate Isolated Sessions for Emis Api (Guaranteed to default to claude-fable-5-1)
   const [emisSessions, setEmisSessions] = useState<ChatSession[]>(() => {
     const saved = storage.getItem('ai_emis_sessions');
     if (saved) {
-      try { 
+      try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
           return parsed.map(s => ({
@@ -195,7 +190,6 @@ export default function AiChat() {
     return storage.getItem('ai_emis_active_session_id') || emisSessions[0]?.id || 'emis_' + Date.now();
   });
 
-  // Mapped active session state to the selected provider
   const sessions = provider === 'groq' ? groqSessions : emisSessions;
   const activeSessionId = provider === 'groq' ? groqActiveSessionId : emisActiveSessionId;
   const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
@@ -230,7 +224,6 @@ export default function AiChat() {
     storage.setItem('ai_current_model', newModel);
   };
 
-  // UI & Chat State
   const [inputMessage, setInputMessage] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -243,7 +236,6 @@ export default function AiChat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  // Save sessions to storage per provider
   useEffect(() => {
     storage.setItem('ai_groq_sessions', JSON.stringify(groqSessions));
   }, [groqSessions]);
@@ -260,7 +252,6 @@ export default function AiChat() {
     storage.setItem('ai_emis_model', emisModel);
   }, [emisModel]);
 
-  // Handle switching between Groq and Emis
   const handleSwitchProvider = (newProvider: AIProvider) => {
     if (newProvider === 'emis' && isEmisExhausted) {
       setProvider('groq');
@@ -271,7 +262,6 @@ export default function AiChat() {
     storage.setItem('ai_provider', newProvider);
   };
 
-  // Fetch all available models from API on mount, verify Emis health, and auto-failover to Groq if exhausted
   const fetchModels = useCallback(async () => {
     try {
       const res = await fetch('/api/ai/models?provider=all');
@@ -301,7 +291,6 @@ export default function AiChat() {
           }
         }
 
-        // Detect if Emis has run out or reached verification limit
         if (data.emisExhausted) {
           setIsEmisExhausted(true);
           setProvider('groq');
@@ -318,11 +307,10 @@ export default function AiChat() {
     fetchModels();
   }, [fetchModels]);
 
-  // Handle scroll events in chat container
   const handleScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-    // If user is more than 120px away from bottom, mark as scrolled up
+
     const distanceToBottom = scrollHeight - (scrollTop + clientHeight);
     const scrolledUp = distanceToBottom > 120;
     isUserScrolledUpRef.current = scrolledUp;
@@ -344,7 +332,6 @@ export default function AiChat() {
 
   const prevSessionIdRef = useRef(activeSessionId);
 
-  // Auto-scroll messages smoothly without fighting streaming frames
   useEffect(() => {
     if (prevSessionIdRef.current !== activeSessionId) {
       prevSessionIdRef.current = activeSessionId;
@@ -358,14 +345,12 @@ export default function AiChat() {
 
     if (!isUserScrolledUpRef.current && scrollContainerRef.current) {
       if (isGenerating) {
-        // Direct RAF pinning during active streaming prevents oscillation and browser vibration
         requestAnimationFrame(() => {
           if (scrollContainerRef.current && !isUserScrolledUpRef.current) {
             scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
           }
         });
       } else {
-        // Smooth scroll when finished or when new complete message arrives
         scrollContainerRef.current.scrollTo({
           top: scrollContainerRef.current.scrollHeight,
           behavior: 'smooth'
@@ -374,7 +359,6 @@ export default function AiChat() {
     }
   }, [activeSession?.messages, isGenerating, activeSessionId]);
 
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -404,19 +388,16 @@ export default function AiChat() {
     setIsSidebarOpen(false);
   };
 
-  // Purge session and associated keys from local and session storage
   const purgeSessionFromStorage = (sessionId: string, updatedSessions: ChatSession[]) => {
     try {
       const storageKey = provider === 'groq' ? 'ai_groq_sessions' : 'ai_emis_sessions';
       storage.setItem(storageKey, JSON.stringify(updatedSessions));
 
-      // Remove any session-specific storage keys
       storage.removeItem(`ai_chat_${sessionId}`);
       storage.removeItem(`ai_session_${sessionId}`);
       storage.removeItem(`chat_${sessionId}`);
       storage.removeItem(sessionId);
 
-      // Purge any matching keys from browser localStorage and sessionStorage directly
       if (typeof window !== 'undefined') {
         if (window.localStorage) {
           window.localStorage.removeItem(`ai_chat_${sessionId}`);
@@ -561,7 +542,7 @@ export default function AiChat() {
     };
 
     const isFirstMessage = activeSession.messages.length === 0;
-    const newTitle = isFirstMessage 
+    const newTitle = isFirstMessage
       ? (text.length > 28 ? text.slice(0, 28) + '...' : text)
       : activeSession.title;
 
@@ -619,7 +600,6 @@ export default function AiChat() {
         throw new Error(errMessage);
       }
 
-      // Check if backend automatically failed over provider or alternate model with available credit/quota
       const switchedProvider = response.headers.get('x-switched-provider');
       const rawSwitchedModel = response.headers.get('x-switched-model');
       const switchedModel = rawSwitchedModel ? sanitizeGroqModel(rawSwitchedModel) : null;
@@ -693,7 +673,6 @@ export default function AiChat() {
                     return s;
                   }));
                 } else if (!accumulatedContent && reasoning) {
-                  // Keep user informed during chain-of-thought analysis
                   setSessions(prev => prev.map(s => {
                     if (s.id === activeSession.id) {
                       return {
@@ -776,7 +755,6 @@ export default function AiChat() {
     const trimmed = activeSession.messages.slice(0, msgIndex);
     const textToSend = prevUserMsg.content;
 
-    // Reset messages up to previous user message
     setSessions(prev => prev.map(s => {
       if (s.id === activeSession.id) {
         return { ...s, messages: trimmed };
@@ -784,7 +762,6 @@ export default function AiChat() {
       return s;
     }));
 
-    // Trigger send with explicit history
     const assistantPlaceholderId = 'msg_' + (Date.now() + 1);
     const initialAssistantMessage: ChatMessage = {
       id: assistantPlaceholderId,
@@ -843,7 +820,6 @@ export default function AiChat() {
         throw new Error(errMessage);
       }
 
-      // Check if backend automatically failed over provider or alternate model with available credit/quota
       const switchedProvider = response.headers.get('x-switched-provider');
       const rawSwitchedModel = response.headers.get('x-switched-model');
       const switchedModel = rawSwitchedModel ? sanitizeGroqModel(rawSwitchedModel) : null;
@@ -1009,7 +985,6 @@ export default function AiChat() {
     URL.revokeObjectURL(url);
   };
 
-  // Compile list of models to display in dropdown based on active provider
   const modelOptions = React.useMemo(() => {
     if (provider === 'groq') {
       return groqModels.map(m => ({
@@ -1034,10 +1009,9 @@ export default function AiChat() {
   return (
     <PageLayout title="AI Chat" maxWidth="wide" showBack={false}>
       <div className="max-w-[1400px] mx-auto h-[calc(100vh-8.5rem)] flex flex-col md:flex-row gap-4 relative">
-        
-        {/* Mobile Header Toggle */}
+
         <div className="md:hidden flex items-center justify-between bg-zinc-900 border border-zinc-800 rounded-xl p-3">
-          <button 
+          <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
             className="flex items-center gap-2 text-sm font-semibold text-zinc-200"
           >
@@ -1053,12 +1027,10 @@ export default function AiChat() {
           </button>
         </div>
 
-        {/* Sidebar - Sessions & Sigma AI Persona */}
         <div className={`
           fixed md:relative inset-y-0 left-0 z-40 md:z-auto w-64 bg-zinc-950 md:bg-zinc-900/60 border border-zinc-800/80 rounded-2xl flex flex-col overflow-hidden backdrop-blur-md transition-all duration-300
           ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}>
-          {/* Sidebar Header */}
           <div className="p-4 border-b border-zinc-800/60 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Bot size={20} className={colors.secondary} />
@@ -1072,7 +1044,7 @@ export default function AiChat() {
               >
                 <Plus size={16} />
               </button>
-              <button 
+              <button
                 onClick={() => setIsSidebarOpen(false)}
                 className="md:hidden p-2 text-zinc-400 hover:text-white"
               >
@@ -1081,7 +1053,6 @@ export default function AiChat() {
             </div>
           </div>
 
-          {/* Chat Sessions List */}
           <div className="flex-1 overflow-y-auto p-2 space-y-1 scrollbar-thin scrollbar-thumb-zinc-800">
             {sessions.map((session) => {
               const isActive = session.id === activeSessionId;
@@ -1094,8 +1065,8 @@ export default function AiChat() {
                     setIsSidebarOpen(false);
                   }}
                   className={`group flex items-center justify-between p-2.5 rounded-xl cursor-pointer text-xs font-medium transition-all ${
-                    isActive 
-                      ? `bg-zinc-800 text-white border border-zinc-700/60 ${colors.shadow}` 
+                    isActive
+                      ? `bg-zinc-800 text-white border border-zinc-700/60 ${colors.shadow}`
                       : 'text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-200'
                   }`}
                 >
@@ -1117,7 +1088,6 @@ export default function AiChat() {
             })}
           </div>
 
-          {/* Sidebar Footer with Clear All History */}
           {sessions.some(s => s.messages.length > 0) && (
             <div className="p-2 border-t border-zinc-800/60 select-none">
               <button
@@ -1132,19 +1102,15 @@ export default function AiChat() {
           )}
         </div>
 
-        {/* Main Chat Area */}
         <div className="flex-1 bg-zinc-950/70 border border-zinc-800/80 rounded-2xl flex flex-col overflow-hidden backdrop-blur-md shadow-2xl relative">
-          
-          {/* Top Bar: Model selector + Actions */}
+
           <div className="p-3.5 border-b border-zinc-800/60 flex flex-wrap items-center justify-between bg-zinc-900/40 gap-3">
             <div className="flex flex-wrap items-center gap-3 flex-1 min-w-0">
-              {/* Engine Badge */}
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs font-semibold text-zinc-200 shadow-inner">
                 <Zap size={14} className="text-emerald-400" />
                 <span>AI Assistant</span>
               </div>
 
-              {/* Model Selector Dropdown */}
               <div className="flex items-center gap-2 flex-1 min-w-[200px] max-w-sm">
                 <div className="relative flex-1">
                   <select
@@ -1170,7 +1136,6 @@ export default function AiChat() {
 
             </div>
 
-            {/* Right Corner: Actions */}
             <div className="flex items-center gap-1.5">
               <button
                 onClick={exportChat}
@@ -1191,9 +1156,8 @@ export default function AiChat() {
             </div>
           </div>
 
-          {/* Message Stream */}
           <div className="relative flex-1 min-h-0 flex flex-col">
-            <div 
+            <div
               ref={scrollContainerRef}
               onScroll={handleScroll}
               className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 scrollbar-thin scrollbar-thumb-zinc-800"
@@ -1212,7 +1176,6 @@ export default function AiChat() {
                     </p>
                   </div>
 
-                  {/* Quick Prompts */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full pt-2">
                     {[
                       "💡 Explain quantum computing in simple terms",
@@ -1248,7 +1211,6 @@ export default function AiChat() {
                       animate={{ opacity: 1, y: 0 }}
                       className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} group`}
                     >
-                      {/* Role & Model Tag */}
                       <div className="flex items-center gap-2 mb-1.5 px-2">
                         <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-500 font-bold">
                           {modelLabel}
@@ -1258,11 +1220,10 @@ export default function AiChat() {
                         </span>
                       </div>
 
-                      {/* Message Bubble */}
                       <div className={`
                         max-w-[92%] sm:max-w-[85%] rounded-2xl px-5 py-4 text-sm leading-relaxed relative
-                        ${isUser 
-                          ? `${colors.primaryBg} text-black font-medium rounded-tr-none shadow-lg ${colors.shadow}` 
+                        ${isUser
+                          ? `${colors.primaryBg} text-black font-medium rounded-tr-none shadow-lg ${colors.shadow}`
                           : 'bg-zinc-900/90 border border-zinc-800 text-zinc-100 rounded-tl-none shadow-xl'}
                       `}>
                         {isUser ? (
@@ -1298,7 +1259,7 @@ export default function AiChat() {
                                             strict: false
                                           });
                                           return (
-                                            <div 
+                                            <div
                                               className="katex-display my-3"
                                               dangerouslySetInnerHTML={{ __html: rendered }}
                                             />
@@ -1345,11 +1306,10 @@ export default function AiChat() {
                                     const { href, children } = props;
                                     if (!href) return <span>{children}</span>;
 
-                                    // Auto-detect video, audio, or image media links (handling query parameters & YouTube)
                                     const cleanUrl = href.split('?')[0].split('#')[0].toLowerCase();
                                     const isVideoExt = cleanUrl.endsWith('.mp4') || cleanUrl.endsWith('.webm') || cleanUrl.endsWith('.mov') || cleanUrl.endsWith('.m4v') || cleanUrl.endsWith('.ogv');
                                     const isYoutube = href.includes('youtube.com') || href.includes('youtu.be') || href.includes('vimeo.com');
-                                    
+
                                     if (isVideoExt || isYoutube) {
                                       return <MediaBlock type="video" src={href} title={typeof children === 'string' ? children : 'Generated Video'} />;
                                     }
@@ -1392,7 +1352,6 @@ export default function AiChat() {
                           </div>
                         )}
 
-                        {/* Action buttons on hover */}
                         {!isUser && msg.content && (
                           <div className="flex items-center gap-1 mt-3 pt-2 border-t border-zinc-800/60 text-zinc-500">
                             <button
@@ -1422,7 +1381,6 @@ export default function AiChat() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Scroll to bottom floating button */}
             <AnimatePresence>
               {isUserScrolledUp && activeSession && activeSession.messages.length > 0 && (
                 <motion.button
@@ -1439,7 +1397,6 @@ export default function AiChat() {
             </AnimatePresence>
           </div>
 
-          {/* Message Input Box */}
           <div className="p-4 border-t border-zinc-800/80 bg-zinc-900/60">
             <div className="flex items-end gap-2 bg-zinc-900 border border-zinc-700/80 rounded-2xl p-2 focus-within:border-zinc-500 transition-all shadow-inner">
               <textarea
@@ -1452,7 +1409,7 @@ export default function AiChat() {
                 disabled={isGenerating}
                 className="flex-1 bg-transparent px-3 py-2 text-white placeholder:text-zinc-600 focus:outline-none resize-none text-sm font-sans box-border max-h-48 scrollbar-thin scrollbar-thumb-zinc-800"
               />
-              
+
               {isGenerating ? (
                 <button
                   onClick={handleStopGenerating}

@@ -91,14 +91,14 @@ export default function LuminGames() {
               />
             );
           })}
-          
+
           {displayedGames.length === 0 && (
             <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
               <Box className="w-12 h-12 mb-4 opacity-20" />
               <p>No games found matching your search.</p>
             </div>
           )}
-          
+
           {visibleCount < filteredGames.length && (
             <div className="col-span-full flex justify-center mt-6">
               <button
@@ -112,7 +112,6 @@ export default function LuminGames() {
         </div>
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -167,7 +166,7 @@ export default function LuminGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

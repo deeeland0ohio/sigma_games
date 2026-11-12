@@ -1,24 +1,3 @@
-/**
- * Low-level SoundCloud API access.
- *
- * Kept separate from the SoundCloud *source* so other resolvers can search it
- * for a verified copy of a track without importing the source layer (which
- * itself imports the full-length layer, and would form a cycle).
- */
-
-/**
- * SoundCloud client ids.
- *
- * The public `api-v2` endpoints answer 401 without a valid 32-character
- * client id, and SoundCloud rotates them — the ids that used to be copy-pasted
- * into projects like this one have been dead for a while. A dead id is not a
- * loud failure either: every search just comes back empty, so the whole
- * source looks broken while nothing is thrown.
- *
- * The homepage still embeds a working id, so it is scraped and then *verified*
- * with a real request before use. A 401 anywhere invalidates it and forces a
- * fresh scrape. `SOUNDCLOUD_CLIENT_ID` overrides the scrape entirely.
- */
 const FALLBACK_CLIENT_IDS = [
   "pmagYZKQF6mRtNmtRzPkXSQJ76jYHLN8",
   "Pb72ranhoyt6gw7hM7TkzUItXlMWSNSo",
@@ -32,7 +11,6 @@ const CLIENT_ID_RETRY = 2 * 60 * 1000;
 let cachedClientId = process.env.SOUNDCLOUD_CLIENT_ID || "";
 let lastClientIdFetch = 0;
 
-/** Cheap check that a candidate id actually works. */
 async function clientIdWorks(candidate: string): Promise<boolean> {
   try {
     const res = await fetch(
@@ -58,7 +36,7 @@ async function scrapeClientId(): Promise<string | null> {
     for (const match of html.matchAll(/client_id["']?\s*[:=]\s*["']([a-zA-Z0-9]{32})["']/g)) {
       candidates.add(match[1]);
     }
-    // The page also carries the id as a bare token in its bootstrap data.
+
     for (const match of html.matchAll(/\b[a-zA-Z0-9]{32}\b/g)) {
       candidates.add(match[0]);
     }
@@ -83,21 +61,15 @@ export async function getValidSoundCloudClientId(): Promise<string> {
     return fresh;
   }
 
-  // Do not scrape again on every request when SoundCloud is unreachable.
   lastClientIdFetch = now - CLIENT_ID_TTL + CLIENT_ID_RETRY;
   return cachedClientId || FALLBACK_CLIENT_IDS[0];
 }
 
-/** Force a fresh id after a 401. */
 export function invalidateSoundCloudClientId(): void {
   cachedClientId = "";
   lastClientIdFetch = 0;
 }
 
-/**
- * GET on api-v2 with the current client id, retrying once with a fresh id
- * when the cached one has been revoked.
- */
 export async function soundcloudGet(path: string, timeoutMs = 8000): Promise<Response | null> {
   const separator = path.includes("?") ? "&" : "?";
 
@@ -123,7 +95,6 @@ export async function soundcloudGet(path: string, timeoutMs = 8000): Promise<Res
 
 export { USER_AGENT as SOUNDCLOUD_USER_AGENT };
 
-/** A playable URL for one exact SoundCloud track id. */
 export async function resolveSoundCloudStream(trackId: any, trackAuth?: string): Promise<{ url: string } | null> {
   try {
     const clientId = await getValidSoundCloudClientId();
@@ -144,8 +115,6 @@ export async function resolveSoundCloudStream(trackId: any, trackAuth?: string):
     });
     if (transcodings.length === 0) return null;
 
-    // Progressive first (plain MP3 the <audio> element can stream and seek),
-    // then HLS for tracks that only offer that.
     const ordered = [
       ...transcodings.filter((t) => t.format?.protocol === "progressive"),
       ...transcodings.filter((t) => t.format?.protocol === "hls"),
@@ -176,13 +145,12 @@ export interface SoundCloudCandidate {
   id: number;
   title: string;
   artist: string;
-  duration: number; // seconds
+  duration: number;
   streamable: boolean;
   verifiedUser: boolean;
   permalink?: string;
 }
 
-/** Raw track search, for finding a specific recording by metadata. */
 export async function searchSoundCloudTracks(query: string, limit = 12): Promise<SoundCloudCandidate[]> {
   try {
     const res = await soundcloudGet(`/search/tracks?q=${encodeURIComponent(query)}&limit=${limit}`, 8000);

@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from 'react';
 
 export interface FluidConfig {
-  curl: number;        // Swirl / vorticity (1 - 100)
-  dissipation: number; // Fade speed / dissipation rate (1 - 100)
-  splatRadius: number; // Size of injected fluid splats (1 - 100)
-  speed: number;       // Simulation speed multiplier (1 - 100)
+  curl: number;
+  dissipation: number;
+  splatRadius: number;
+  speed: number;
 }
 
 interface FluidBackgroundProps {
@@ -19,7 +19,7 @@ interface FluidBackgroundProps {
 
 function parseColorToRgb(colorStr?: string, fallback: [number, number, number] = [1.0, 0.55, 0.1]): [number, number, number] {
   if (!colorStr) return fallback;
-  
+
   if (colorStr.startsWith('#')) {
     const c = colorStr.slice(1);
     if (c.length === 3) {
@@ -60,8 +60,7 @@ function getGradientColor(palette: [number, number, number][], timeSec: number, 
   const idx1 = Math.floor(progress) % palette.length;
   const idx2 = (idx1 + 1) % palette.length;
   const rawFrac = progress - Math.floor(progress);
-  
-  // Smooth cosine s-curve interpolation
+
   const frac = (1 - Math.cos(rawFrac * Math.PI)) * 0.5;
 
   const c1 = palette[idx1];
@@ -123,7 +122,6 @@ export default function FluidBackground({
       gl = null;
     }
 
-    // 2D Fallback if WebGL context creation failed
     if (!gl) {
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
@@ -234,10 +232,8 @@ export default function FluidBackground({
       };
     }
 
-    // --- WebGL Navier-Stokes Fluid Engine with Turbulence & Self-Collision ---
     const isWebGL2 = 'WebGL2RenderingContext' in window && gl instanceof WebGL2RenderingContext;
-    
-    // Extensions
+
     let halfFloatExt: any = null;
     let floatExt: any = null;
 
@@ -293,8 +289,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Organic Fluid Splat Shader: uses fractal turbulent noise inside an invisible circle boundary
-    // around the cursor, creating organic fluid-like shapes without spawning far from the pointer.
     const splatShader = `
       precision highp float;
       varying vec2 vUv;
@@ -363,7 +357,7 @@ export default function FluidBackground({
 
         float distSq = dot(distortedP, distortedP);
         float baseSplat = exp(-distSq / radius);
-        
+
         // Modulate edge with smoke wisps and apply circular cutoff mask
         float wisp = 0.85 + 0.3 * noise(noiseCoord * 1.8);
         vec3 splat = baseSplat * wisp * color * circleMask;
@@ -373,7 +367,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Velocity & Dye Advection with Boundary Clamping and CFL Stability
     const advectionShader = `
       precision highp float;
       varying vec2 vUv;
@@ -392,7 +385,7 @@ export default function FluidBackground({
         }
 
         vec2 coord = vUv - dt * vel * texelSize;
-        
+
         // Clamp to avoid border artifacts
         coord = clamp(coord, texelSize * 0.5, vec2(1.0) - texelSize * 0.5);
 
@@ -404,7 +397,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Divergence Shader
     const divergenceShader = `
       precision highp float;
       varying vec2 vUv;
@@ -428,7 +420,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Vorticity (Curl) Shader
     const curlShader = `
       precision highp float;
       varying vec2 vUv;
@@ -445,7 +436,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Vorticity Confinement (creates natural swirling eddies and curling vortex filaments)
     const vorticityShader = `
       precision highp float;
       varying vec2 vUv;
@@ -472,7 +462,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Pressure Poisson Solver (Jacobi iteration with boundary condition)
     const pressureShader = `
       precision highp float;
       varying vec2 vUv;
@@ -486,13 +475,12 @@ export default function FluidBackground({
         float T = texture2D(uPressure, clamp(vUv + vec2(0.0, texelSize.y), 0.0, 1.0)).x;
         float B = texture2D(uPressure, clamp(vUv - vec2(0.0, texelSize.y), 0.0, 1.0)).x;
         float div = texture2D(uDivergence, vUv).x;
-        
+
         float p = (L + R + T + B - div) * 0.25;
         gl_FragColor = vec4(p, 0.0, 0.0, 1.0);
       }
     `;
 
-    // Gradient Subtraction: enforces mass conservation so fluid pushes surrounding liquid & smoke
     const gradientSubtractShader = `
       precision highp float;
       varying vec2 vUv;
@@ -505,7 +493,7 @@ export default function FluidBackground({
         float R = texture2D(uPressure, clamp(vUv + vec2(texelSize.x, 0.0), 0.0, 1.0)).x;
         float T = texture2D(uPressure, clamp(vUv + vec2(0.0, texelSize.y), 0.0, 1.0)).x;
         float B = texture2D(uPressure, clamp(vUv - vec2(0.0, texelSize.y), 0.0, 1.0)).x;
-        
+
         vec2 vel = texture2D(uVelocity, vUv).xy;
         vel.xy -= vec2(R - L, T - B) * 0.5;
 
@@ -517,7 +505,6 @@ export default function FluidBackground({
       }
     `;
 
-    // Display Shader: renders luminous glowing smoke plumes matching reference images (35% less bright)
     const displayShader = `
       precision highp float;
       varying vec2 vUv;
@@ -525,11 +512,11 @@ export default function FluidBackground({
 
       void main () {
         vec3 c = texture2D(uTexture, vUv).rgb;
-        
+
         // High dynamic range tone mapping: 35% less bright with deep, pitch-black background
         vec3 col = c * 0.94;
         col = pow(col, vec3(1.08));
-        
+
         // Soft vignette at outer bounds
         vec2 uv = vUv * (1.0 - vUv.yx);
         float vig = uv.x * uv.y * 15.0;
@@ -557,7 +544,6 @@ export default function FluidBackground({
     gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 
-    // Determine texture format with explicit FBO validation check
     let textureType: number = gl.UNSIGNED_BYTE;
     let internalFormat: number = gl.RGBA;
     if (isWebGL2) {
@@ -659,13 +645,11 @@ export default function FluidBackground({
       const rad = baseRadius * radiusFactor;
       seedCounter = (seedCounter + 0.173) % 100.0;
 
-      // Clamp injected velocity magnitude to keep Navier-Stokes solver stable without high-speed glitching
       const velMag = Math.hypot(dx, dy);
       const clampedMag = Math.min(velMag, 18.0);
       const normVx = velMag > 0.001 ? (dx / velMag) * clampedMag : 0;
       const normVy = velMag > 0.001 ? (dy / velMag) * clampedMag : 0;
 
-      // 1. Splat into Velocity Field
       gl.uniform1i(gl.getUniformLocation(splatProg, 'uTarget'), velocity.read.attach(0));
       gl.uniform1f(gl.getUniformLocation(splatProg, 'aspectRatio'), aspect);
       gl.uniform2f(gl.getUniformLocation(splatProg, 'point'), x, y);
@@ -676,7 +660,6 @@ export default function FluidBackground({
       blit(velocity.write.fbo, velocity.width, velocity.height);
       velocity.swap();
 
-      // 2. Splat into Dye Field (35% reduced brightness)
       gl.uniform1i(gl.getUniformLocation(splatProg, 'uTarget'), density.read.attach(0));
       gl.uniform3f(gl.getUniformLocation(splatProg, 'color'), color[0] * 0.91, color[1] * 0.91, color[2] * 0.91);
       gl.uniform1f(gl.getUniformLocation(splatProg, 'radius'), rad);
@@ -691,7 +674,6 @@ export default function FluidBackground({
     resize();
     window.addEventListener('resize', resize);
 
-    // Pointer Interaction Handling (Smooth Sub-step Ribbon Injection)
     let prevPointerX = -1;
     let prevPointerY = -1;
     const simStartTime = performance.now();
@@ -707,7 +689,7 @@ export default function FluidBackground({
         ].filter(Boolean) as string[];
       }
       const palette = rawColors.map(c => parseColorToRgb(c, [1.0, 0.6, 0.1]));
-      // Smooth gradient transition cycle (1.2 seconds per color)
+
       return getGradientColor(palette, timeSec, 1.2);
     };
 
@@ -726,7 +708,6 @@ export default function FluidBackground({
       const aspect = canvas.width / canvas.height;
       const dist = Math.hypot((currX - prevPointerX) * aspect, currY - prevPointerY);
 
-      // Interpolate along movement vector so continuous fluid strokes form smooth ribbons
       const steps = Math.max(1, Math.min(8, Math.ceil(dist / 0.035)));
       const elapsedSec = (performance.now() - simStartTime) / 1000;
       const color = getCurrentGradientColor(elapsedSec);
@@ -768,7 +749,6 @@ export default function FluidBackground({
     let lastFrameTime = performance.now();
 
     const render = (time: number) => {
-      // Bound dt to prevent leapfrog instability
       const dt = Math.min((time - lastFrameTime) / 1000, 0.024) * powerRef.current * (configRef.current.speed / 40);
       lastFrameTime = time;
 
@@ -778,17 +758,15 @@ export default function FluidBackground({
 
       const curlVal = (configRef.current.curl / 40) * 34.0;
       const dissipationFactor = (configRef.current.dissipation / 40);
-      // Exponential age fade: fluid gently dissipates as it ages
+
       const dyeDissipation = Math.max(0.92, Math.min(0.995, 1.0 - dissipationFactor * 0.016));
       const velDissipation = Math.max(0.94, Math.min(0.995, 1.0 - dissipationFactor * 0.008));
 
-      // 1. Curl pass
       gl.useProgram(curlProg);
       gl.uniform2f(gl.getUniformLocation(curlProg, 'texelSize'), velocity.texelSizeX, velocity.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(curlProg, 'uVelocity'), velocity.read.attach(0));
       blit(curl.fbo, curl.width, curl.height);
 
-      // 2. Vorticity Confinement pass (produces curling swirls and fluid billows)
       gl.useProgram(vorticityProg);
       gl.uniform2f(gl.getUniformLocation(vorticityProg, 'texelSize'), velocity.texelSizeX, velocity.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(vorticityProg, 'uVelocity'), velocity.read.attach(0));
@@ -798,13 +776,11 @@ export default function FluidBackground({
       blit(velocity.write.fbo, velocity.width, velocity.height);
       velocity.swap();
 
-      // 3. Divergence pass
       gl.useProgram(divergenceProg);
       gl.uniform2f(gl.getUniformLocation(divergenceProg, 'texelSize'), velocity.texelSizeX, velocity.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(divergenceProg, 'uVelocity'), velocity.read.attach(0));
       blit(divergence.fbo, divergence.width, divergence.height);
 
-      // 4. Pressure Solve (28 Jacobi iterations for fluid incompressibility and self-collision displacement)
       gl.useProgram(pressureProg);
       gl.uniform2f(gl.getUniformLocation(pressureProg, 'texelSize'), velocity.texelSizeX, velocity.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(pressureProg, 'uDivergence'), divergence.attach(0));
@@ -814,7 +790,6 @@ export default function FluidBackground({
         pressure.swap();
       }
 
-      // 5. Gradient Subtract (projects velocity so swiping pushes and diverts existing fluid)
       gl.useProgram(gradSubProg);
       gl.uniform2f(gl.getUniformLocation(gradSubProg, 'texelSize'), velocity.texelSizeX, velocity.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(gradSubProg, 'uPressure'), pressure.read.attach(0));
@@ -822,7 +797,6 @@ export default function FluidBackground({
       blit(velocity.write.fbo, velocity.width, velocity.height);
       velocity.swap();
 
-      // 6. Advect Velocity (advects momentum so moving water/smoke collides and rolls into waves)
       gl.useProgram(advectionProg);
       gl.uniform2f(gl.getUniformLocation(advectionProg, 'texelSize'), velocity.texelSizeX, velocity.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(advectionProg, 'uVelocity'), velocity.read.attach(0));
@@ -832,7 +806,6 @@ export default function FluidBackground({
       blit(velocity.write.fbo, velocity.width, velocity.height);
       velocity.swap();
 
-      // 7. Advect Dye (advects color density so moving streams push existing dye out of the way)
       gl.uniform2f(gl.getUniformLocation(advectionProg, 'texelSize'), density.texelSizeX, density.texelSizeY);
       gl.uniform1i(gl.getUniformLocation(advectionProg, 'uVelocity'), velocity.read.attach(0));
       gl.uniform1i(gl.getUniformLocation(advectionProg, 'uSource'), density.read.attach(1));
@@ -840,7 +813,6 @@ export default function FluidBackground({
       blit(density.write.fbo, density.width, density.height);
       density.swap();
 
-      // 8. Render to Screen
       gl.useProgram(displayProg);
       gl.uniform1i(gl.getUniformLocation(displayProg, 'uTexture'), density.read.attach(0));
       blit(null, canvas.width, canvas.height);

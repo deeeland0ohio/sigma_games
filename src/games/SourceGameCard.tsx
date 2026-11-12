@@ -40,7 +40,6 @@ export default function SourceGameCard({
       className={`group relative w-[150px] h-[150px] min-w-[150px] min-h-[150px] max-w-[150px] max-h-[150px] aspect-square overflow-hidden rounded-xl bg-zinc-900 border border-zinc-800 ${hoverBorderClass} transition-all select-none shadow-sm hover:shadow-lg cursor-pointer flex-shrink-0`}
       onClick={onClick}
     >
-      {/* Fallback & Initial State Placeholder (Always rendered underneath image) */}
       <div className="absolute inset-0 bg-gradient-to-br from-zinc-850 to-zinc-950 flex flex-col items-center justify-center p-2.5 text-center pointer-events-none">
         {CustomIcon ? (
           <div className="w-9 h-9 rounded-lg bg-zinc-800/90 border border-zinc-700/60 flex items-center justify-center mb-2 shadow-sm group-hover:scale-105 transition-transform duration-200">
@@ -56,7 +55,6 @@ export default function SourceGameCard({
         </span>
       </div>
 
-      {/* Actual Image */}
       {image && !imageError && (
         <img
           src={image}
@@ -71,7 +69,6 @@ export default function SourceGameCard({
         />
       )}
 
-      {/* Favorites Button */}
       {onToggleFavorite && (
         <button
           type="button"
@@ -86,7 +83,6 @@ export default function SourceGameCard({
         </button>
       )}
 
-      {/* Top Hover Gradient & Bottom Title Overlay */}
       {image && !imageError && (
         <>
           <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none" />

@@ -23,9 +23,7 @@ export default function Home() {
   const [dynamicGames, setDynamicGames] = useState(games);
 
   useEffect(() => {
-    // Dynamically fetch and update collection game counts to guarantee accuracy
     const fetchCounts = async () => {
-      // 1. GN Math
       fetch("https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json")
         .then(res => res.json())
         .then((raw: any) => {
@@ -35,7 +33,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 2. UGS (Ultimate Game Stash)
       fetch("https://cdn.jsdelivr.net/gh/bubbls/ugs-singlefile@main/games.js")
         .then(res => res.text())
         .then(text => {
@@ -50,7 +47,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 3. Seraph Games
       fetch('https://api.github.com/repos/a456pur/seraph/git/trees/main?recursive=1')
         .then(res => res.json())
         .then((data: any) => {
@@ -62,7 +58,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 4. 3kh0 Games
       fetch('https://api.github.com/repos/3kh0/3kh0-lite/git/trees/main?recursive=1')
         .then(res => res.json())
         .then((data: any) => {
@@ -74,7 +69,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 5. Noah's Hub Games
       fetch('https://cdn.jsdelivr.net/gh/NoahsAmazingTutoringHelp/Noahs-Calculus-Tutor@master/games.js')
         .then(async (res) => {
           if (!res.ok) throw new Error("Fetch failed");
@@ -87,7 +81,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 6. Alexr Games
       fetch("https://cdn.jsdelivr.net/gh/dskjfoisjfsjio/alexrsworld@main/singlefilegames.json")
         .then(res => res.json())
         .then((raw: any) => {
@@ -97,7 +90,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 7. Hydra Games
       fetch("https://cdn.jsdelivr.net/gh/zennedu/hydra@main/gmes.json")
         .then(res => res.json())
         .then((raw: any) => {
@@ -106,7 +98,6 @@ export default function Home() {
           }
         }).catch(() => {});
 
-      // 8. Chicken King's Vault (CVK)
       fetch("https://cdn.jsdelivr.net/gh/WanoCapy/ChickenKingsVault@main/games.js")
         .then(res => res.text())
         .then(text => {
@@ -121,7 +112,6 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-
     let currentLine = 0;
     const interval = setInterval(() => {
       if (currentLine < BOOT_LINES.length) {
@@ -138,8 +128,7 @@ export default function Home() {
   return (
     <PageLayout title="Home">
       <div className="space-y-24">
-        {/* Terminal Boot Sequence */}
-        <section 
+        <section
           className={`bg-black border border-zinc-800 rounded-xl p-6 font-mono text-sm md:text-base shadow-2xl ${colors.shadow}`}
         >
           <div className="flex items-center gap-2 mb-4 border-b border-zinc-800 pb-4 text-zinc-500">
@@ -173,23 +162,22 @@ export default function Home() {
           </div>
         </section>
 
-        {/* Games Grid */}
         <section id="games" className="space-y-8">
           <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
             <h2 className="text-2xl font-bold text-white tracking-tight">OPTIONS</h2>
           </div>
-          
+
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {dynamicGames.map((game) => (
-              <GameCard 
-                key={game.id} 
-                game={game} 
+              <GameCard
+                key={game.id}
+                game={game}
                 to={
-                  game.id === 'all-games' ? '/our-games' : 
+                  game.id === 'all-games' ? '/our-games' :
                   game.id === 'ai-chat' ? '/ai-chat' :
                   game.id === 'music' ? '/music' :
-                  game.id === 'popular' ? '/popular' : 
-                  game.id === 'favorites' ? '/favorites' : 
+                  game.id === 'popular' ? '/popular' :
+                  game.id === 'favorites' ? '/favorites' :
                   game.id === 'gn-math' ? '/gn-math' :
                   game.id === 'ugs' ? '/ugs' :
                   game.id === 'seraph' ? '/seraph' :

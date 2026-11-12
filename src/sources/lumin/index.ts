@@ -1,4 +1,3 @@
-// Lumin Games Library & Integration
 export interface LuminGameItem {
   id?: string;
   title: string;

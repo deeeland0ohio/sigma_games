@@ -1,10 +1,5 @@
 import { ClientMusicTrack, formatDuration } from "./types";
 
-/**
- * Client-side fallback search, used only if /api/music is unreachable.
- * Audio is never guessed from another catalog here: the server does the
- * verified full-length lookup, and the preview is always the real song.
- */
 export async function fetchClientDeezer(query: string = "", page: number = 1, limit: number = 30): Promise<ClientMusicTrack[]> {
   const searchTerm = query.trim() || "Top Hits";
   const index = (page - 1) * limit;

@@ -1,21 +1,5 @@
-// HTML surgery for game documents.
-//
-// Why this exists at all: the CDNs that host these games cannot be used in a
-// plain <iframe src="...">. cdn.jsdelivr.net serves .html from /gh/ as
-// `text/plain; charset=utf-8` together with `X-Content-Type-Options: nosniff`,
-// so Chromium renders the page source as literal text instead of running it,
-// and some hosts (e.g. ud-gles3games) answer with `X-Frame-Options: DENY`,
-// which refuses the frame outright. The game document therefore has to be
-// fetched and re-rendered on our own origin — and once it is, the tags below
-// are what make it actually work there.
-//
-// Both the client frame and the server middleware used to carry their own copy
-// of this; the rules live here so they cannot drift apart.
-
 const GN_MATH_TO_FREEBUISNESS = /\/gh\/gn-math\//gi;
 
-// Pinned commit hashes and stale branches go 404 once those repos move, so
-// every known game repository is rewritten to its default branch.
 const NORMALIZE_HASHES =
   /(https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/(?:aDiesmos|WanoCapy|3kh0|a456pur|greenday894|HydroXide1|Noah-Is-Awesome|alexr-hub|bubbls|lonya-k|genizy|degloved-net|freebuisness)\/([a-zA-Z0-9_-]+))@[a-zA-Z0-9_.-]+(\/|$)/g;
 
@@ -25,8 +9,6 @@ const BLOCKED_JSDELIVR =
 const HEAD_OPEN = /<head\b[^>]*>/i;
 const HTML_OPEN = /<html\b[^>]*>/i;
 
-// Sandboxed documents throw on localStorage access, which kills games that
-// probe it during boot. A memory-backed stand-in keeps them alive.
 export const STORAGE_POLYFILL = `<script>
 (function() {
   var mem = {};
@@ -52,9 +34,6 @@ export const STORAGE_POLYFILL = `<script>
 })();
 </script>`;
 
-// Bundled games pop browser dialogs on load: "unofficial port" notices, ad
-// prompts, "are you sure you want to leave". They are part of the downloaded
-// game, not our UI, so they are switched off before the game's own scripts run.
 export const POPUP_SHIM = `<script>
 (function() {
   try {
@@ -67,7 +46,6 @@ export const POPUP_SHIM = `<script>
 })();
 </script>`;
 
-/** Insert snippets as the first thing inside <head>, creating one if needed. */
 export function injectIntoHead(html: string, snippets: string[]): string {
   const block = snippets.filter(Boolean).join('\n');
   if (!block) return html;
@@ -83,11 +61,6 @@ export function injectIntoHead(html: string, snippets: string[]): string {
   return `${block}\n${html}`;
 }
 
-/**
- * Fix the CDN references inside a game document: dead commit hashes, the
- * gn-math repository that stopped serving, and the genizy repos jsdelivr
- * refuses (those are routed through our own content loader instead).
- */
 export function normalizeGameHtml(html: string): string {
   return html
     .replace(GN_MATH_TO_FREEBUISNESS, '/gh/freebuisness/')
@@ -99,16 +72,11 @@ export function normalizeGameHtml(html: string): string {
 }
 
 export interface RewriteOptions {
-  /** <base href> to inject when the document does not declare one. */
   baseHref?: string;
-  /** Strip third-party overlays/analytics. Off for documents we host ourselves. */
+
   stripWidgets?: boolean;
 }
 
-/**
- * Prepare a fetched game document for rendering on our origin: fixed CDN URLs,
- * a <base> so relative assets resolve, and the storage polyfill.
- */
 export function rewriteGameHtml(html: string, options: RewriteOptions = {}): string {
   const { baseHref, stripWidgets = true } = options;
 
@@ -119,7 +87,7 @@ export function rewriteGameHtml(html: string, options: RewriteOptions = {}): str
       .replace(/<script[^>]*src="[^"]*arc\.io[^"]*"[^>]*><\/script>/gi, '<!-- stripped overlay -->')
       .replace(/<script[^>]*src="[^"]*googletagmanager\.com[^"]*"[^>]*><\/script>/gi, '<!-- stripped analytics -->')
       .replace(/gtag\s*\([^)]*\);?/gi, '')
-      // Some ports hard-code a root-relative /js/main.js that does not exist here.
+
       .replace(/src=["']\/js\/main\.js["']/gi, 'src="data:text/javascript,console.log(\'main.js loaded\')"');
   }
 
@@ -127,10 +95,6 @@ export function rewriteGameHtml(html: string, options: RewriteOptions = {}): str
   return injectIntoHead(out, [POPUP_SHIM, needsBase ? `<base href="${baseHref}">` : '', STORAGE_POLYFILL]);
 }
 
-/**
- * Best guess at the directory the document's relative assets live in: the
- * directory of the first CDN asset it references, else the document's own.
- */
 export function deriveBaseHref(html: string, documentUrl: string): string {
   const cdnAsset = html.match(
     /(https?:\/\/(?:testingcf|fastly|cdn|quantil)\.jsdelivr\.net\/gh\/[^\s"'><]+|https?:\/\/(?:raw\.githack\.com|rawcdn\.githack\.com)\/[^\s"'><]+)/i

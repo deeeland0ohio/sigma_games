@@ -39,7 +39,6 @@ export default function FloatingMusicWidget() {
 
   if (!currentTrack) return null;
 
-  // If already on the dedicated music page, don't obstruct full player
   const isMusicPage = location.pathname === '/music';
   if (isMusicPage) return null;
 
@@ -56,9 +55,7 @@ export default function FloatingMusicWidget() {
       className="fixed bottom-6 right-6 z-50 w-[calc(100vw-3rem)] sm:w-[440px] md:w-[480px] bg-zinc-950/95 backdrop-blur-xl border border-zinc-700/80 rounded-2xl p-4 shadow-2xl transition-all duration-300 ring-1 ring-white/10"
     >
       <div className="flex flex-col gap-3">
-        {/* Top row: Track info, art, and actions */}
         <div className="flex items-center gap-3.5">
-          {/* Album Art */}
           <div
             onClick={() => navigate('/music')}
             className="relative w-14 h-14 rounded-xl overflow-hidden bg-zinc-900 border border-zinc-700/80 flex-shrink-0 cursor-pointer group flex items-center justify-center shadow-md"
@@ -81,7 +78,6 @@ export default function FloatingMusicWidget() {
             </div>
           </div>
 
-          {/* Track Name & Artist */}
           <div
             onClick={() => navigate('/music')}
             className="flex-1 min-w-0 cursor-pointer"
@@ -93,7 +89,6 @@ export default function FloatingMusicWidget() {
             <p className="text-xs text-zinc-400 truncate mt-0.5">{currentTrack.artist}</p>
           </div>
 
-          {/* Player controls */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <button
               type="button"
@@ -128,7 +123,6 @@ export default function FloatingMusicWidget() {
               <SkipForward size={18} />
             </button>
 
-            {/* Repeat Button */}
             <button
               type="button"
               onClick={toggleRepeat}
@@ -142,7 +136,6 @@ export default function FloatingMusicWidget() {
               {isRepeating ? <InfinityIcon size={20} className="text-emerald-400" /> : <Repeat size={18} />}
             </button>
 
-            {/* Close & Stop Button */}
             <button
               type="button"
               onClick={stopMusic}
@@ -154,13 +147,11 @@ export default function FloatingMusicWidget() {
           </div>
         </div>
 
-        {/* Bottom row: Scrub bar, time, and volume */}
         <div className="flex items-center gap-3 pt-1 border-t border-zinc-800/80">
           <span className="text-[11px] font-mono text-zinc-400 w-9 text-right flex-shrink-0">
             {formatTime(currentTime)}
           </span>
 
-          {/* Progress Slider */}
           <div className="flex-1 relative flex items-center">
             <input
               type="range"
@@ -177,7 +168,6 @@ export default function FloatingMusicWidget() {
             {formatTime(duration)}
           </span>
 
-          {/* Volume Control */}
           <div className="hidden sm:flex items-center gap-1.5 pl-2 border-l border-zinc-800">
             <button
               type="button"

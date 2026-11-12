@@ -19,7 +19,6 @@ export default function CvkGames() {
   const loadCvkGames = async () => {
     setLoading(true);
     try {
-      // Fetch the dynamic games list from the same CDN host as the catalogue
       const res = await fetch("https://cdn.jsdelivr.net/gh/WanoCapy/ChickenKingsVault@main/games.js");
       if (res.ok) {
         const text = await res.text();
@@ -57,7 +56,7 @@ export default function CvkGames() {
     setSelectedGame(game);
   };
 
-  const filteredGames = games.filter(g => 
+  const filteredGames = games.filter(g =>
     g.title.toLowerCase().includes(search.toLowerCase())
   );
   const displayedGames = filteredGames.slice(0, visibleCount);
@@ -119,14 +118,14 @@ export default function CvkGames() {
                 />
               );
             })}
-            
+
             {displayedGames.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredGames.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -141,7 +140,6 @@ export default function CvkGames() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -196,7 +194,7 @@ export default function CvkGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

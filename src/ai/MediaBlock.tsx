@@ -34,7 +34,6 @@ export const MediaBlock: React.FC<MediaBlockProps> = ({ type, src, alt, title })
 
   return (
     <div className="my-3 rounded-xl border border-zinc-800 bg-[#0d1117] overflow-hidden shadow-xl text-left">
-      {/* Media Window Header */}
       <div className="flex items-center justify-between px-3.5 py-2 bg-zinc-900/90 border-b border-zinc-800/80 select-none">
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 mr-1">
@@ -80,7 +79,6 @@ export const MediaBlock: React.FC<MediaBlockProps> = ({ type, src, alt, title })
         </div>
       </div>
 
-      {/* Media Content */}
       <div className="p-3 bg-black/40 flex items-center justify-center">
         {type === 'image' && (
           <img

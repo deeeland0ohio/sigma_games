@@ -10,4 +10,3 @@ export const solarSmash: Game = {
   url: '/games/solar-smash/index.html',
   popularity: 83
 };
-

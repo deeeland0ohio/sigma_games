@@ -6,7 +6,6 @@ export const SOUNDCLOUD_CLIENT_IDS = [
   "b3e20e360f4e1f744e2de266ab0e5f29",
 ];
 
-/** Client-side fallback search for SoundCloud (search only — playback is the server's job). */
 export async function fetchClientSoundCloud(query: string = "", page: number = 1, limit: number = 30): Promise<ClientMusicTrack[]> {
   const searchTerm = query.trim() || "popular";
   const offset = (page - 1) * limit;

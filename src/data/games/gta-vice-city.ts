@@ -10,4 +10,3 @@ export const gtaViceCity: Game = {
   url: '/games/gta-vice-city/index.html',
   popularity: 100,
 };
-

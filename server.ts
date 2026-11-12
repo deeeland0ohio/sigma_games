@@ -4,7 +4,6 @@ import compression from "compression";
 import path from "path";
 import fs from "fs";
 
-// Automatically load .env file if it exists (supports both Node native process.loadEnvFile and manual fallback)
 try {
   const envPath = path.resolve(process.cwd(), ".env");
   if (fs.existsSync(envPath)) {
@@ -37,17 +36,14 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  // Middleware
   app.use(compression());
   app.use(express.json());
 
-  // Modular API Routes
   app.use("/api", apiRouter);
 
   const publicDir = path.join(process.cwd(), "public");
   const distDir = path.join(process.cwd(), "dist");
 
-  // Serve static fallback files directly from workspace root or dist
   app.get("/static.html", (req, res) => {
     const rootPath = path.join(process.cwd(), "static.html");
     const distFallback = path.join(distDir, "static.html");
@@ -72,7 +68,6 @@ async function startServer() {
     }
   });
 
-  // Compatibility route for /sigmastatic
   app.get("/sigmastatic", (req, res) => {
     const rootPath = path.join(process.cwd(), "static.html");
     const distFallback = path.join(distDir, "static.html");
@@ -85,7 +80,6 @@ async function startServer() {
     }
   });
 
-  // Serve public and dist static directories BEFORE /games 404 fallback
   if (fs.existsSync(distDir)) {
     const distAssetsDir = path.join(distDir, "assets");
     if (fs.existsSync(distAssetsDir)) {
@@ -99,13 +93,11 @@ async function startServer() {
   if (fs.existsSync(publicDir)) {
     app.use(express.static(publicDir));
   }
-  
-  // Prevent missing local game assets from hitting Vite middleware / SPA fallback
+
   app.use('/games', (req, res) => {
     res.status(404).send('Not Found');
   });
 
-  // Vite development middleware vs production static handler
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },

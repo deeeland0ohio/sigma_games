@@ -27,14 +27,13 @@ export default function SeraphGames() {
             .filter((node: any) => node.path.startsWith('games/') && node.path.split('/').length === 2 && node.type === 'tree')
             .map((node: any) => {
               const id = node.path.replace('games/', '');
-              return { 
-                id, 
+              return {
+                id,
                 image: `https://cdn.jsdelivr.net/gh/a456pur/seraph@main/images/thumbnails/${id}.jpg`
               };
             });
-          
+
           if (gameFolders.length > 0) {
-            // Sort alphabetically (0-9-a-z) by formatted title
             gameFolders.sort((a: any, b: any) => {
               const nameA = formatFileName(a.id).toLowerCase();
               const nameB = formatFileName(b.id).toLowerCase();
@@ -107,7 +106,7 @@ export default function SeraphGames() {
             {displayedFiles.map((f, index) => {
               const displayName = formatFileName(f.id);
               const gameId = `seraph:${displayName}`;
-              
+
               return (
                 <SourceGameCard
                   key={`${f.id}-${index}`}
@@ -130,14 +129,14 @@ export default function SeraphGames() {
                 />
               );
             })}
-            
+
             {displayedFiles.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredFiles.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -152,7 +151,6 @@ export default function SeraphGames() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedFile && (
           <motion.div
@@ -209,7 +207,7 @@ export default function SeraphGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

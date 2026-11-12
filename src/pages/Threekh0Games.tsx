@@ -27,21 +27,20 @@ export default function Threekh0Games() {
             .filter((node: any) => node.path.startsWith('projects/') && node.path.split('/').length === 2 && node.type === 'tree')
             .map((node: any) => {
               const id = node.path.replace('projects/', '');
-              // Try to find an image in the tree for this project
-              const imageNode = data.tree.find((n: any) => 
-                n.path.startsWith(`projects/${id}/`) && 
+
+              const imageNode = data.tree.find((n: any) =>
+                n.path.startsWith(`projects/${id}/`) &&
                 (n.path.endsWith('.png') || n.path.endsWith('.jpg'))
               );
-              
-              return { 
+
+              return {
                 link: `projects/${id}/index.html`,
                 imgSrc: imageNode ? imageNode.path : `projects/${id}/meta/apple-touch-icon.png`,
                 title: id.replace(/-/g, ' ')
               };
             });
-          
+
           if (gameFolders.length > 0) {
-            // Sort alphabetically (0-9-a-z) by formatted title
             gameFolders.sort((a: any, b: any) => {
               const nameA = formatFileName(a.title || "").toLowerCase();
               const nameB = formatFileName(b.title || "").toLowerCase();
@@ -78,7 +77,7 @@ export default function Threekh0Games() {
     return `https://cdn.jsdelivr.net/gh/3kh0/3kh0-lite@main/${link}`;
   };
 
-  const filteredGames = games.filter(g => 
+  const filteredGames = games.filter(g =>
     (g.title || g.link).toLowerCase().includes(search.toLowerCase())
   );
   const displayedGames = filteredGames.slice(0, visibleCount);
@@ -117,7 +116,7 @@ export default function Threekh0Games() {
               const displayName = g.title || formatFileName(g.link.split('/')[1] || g.link);
               const imageSrc = g.imgSrc ? `https://cdn.jsdelivr.net/gh/3kh0/3kh0-lite@main/${g.imgSrc}` : null;
               const gameId = `3kh0:${displayName}`;
-              
+
               return (
                 <SourceGameCard
                   key={`${g.link}-${index}`}
@@ -140,14 +139,14 @@ export default function Threekh0Games() {
                 />
               );
             })}
-            
+
             {displayedGames.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredGames.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -162,7 +161,6 @@ export default function Threekh0Games() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -219,7 +217,7 @@ export default function Threekh0Games() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

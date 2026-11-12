@@ -1,11 +1,3 @@
-/**
- * YouTube audio extraction (InnerTube, no API key).
- *
- * Google blocks anonymous player calls from a lot of datacenter IPs
- * ("Sign in to confirm you're not a bot"), so this tries a few clients and
- * gives up cleanly. Callers must treat `null` as "no audio", never as an
- * invitation to play something else.
- */
 import yts from "yt-search";
 import { resolveWithYtDlp } from "./ytdlp";
 
@@ -13,7 +5,6 @@ const INNERTUBE_PLAYER_URL = "https://www.youtube.com/youtubei/v1/player?prettyP
 
 const CLIENTS = [
   {
-    // Still the most permissive client for anonymous audio in 2026.
     clientName: "ANDROID_VR",
     clientVersion: "1.60.19",
     clientId: "28",
@@ -32,7 +23,6 @@ export interface YouTubeStream {
   duration?: number;
 }
 
-/** `yts` has no timeout of its own, and a hung search would stall the request. */
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(null), ms);
@@ -49,7 +39,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   });
 }
 
-/** How long a single step may take, never past the caller's deadline. */
 function stepTimeout(deadline: number | undefined, capMs: number): number {
   if (!deadline) return capMs;
   return Math.max(0, Math.min(capMs, deadline - Date.now()));
@@ -91,7 +80,6 @@ export async function resolveYouTubeAudioStream(
       );
       if (formats.length === 0) continue;
 
-      // Prefer m4a (widest browser support), then the highest bitrate MP3/Opus we can get.
       const best =
         formats.find((f) => f.mimeType.includes("mp4a")) ||
         [...formats].sort((a, b) => (b.bitrate || 0) - (a.bitrate || 0))[0];
@@ -104,11 +92,9 @@ export async function resolveYouTubeAudioStream(
         };
       }
     } catch {
-      // try the next client
     }
   }
 
-  // InnerTube is refused from most datacenter IPs; yt-dlp copes far better.
   const viaYtDlp = await resolveWithYtDlp(id, deadline);
   if (viaYtDlp?.url) {
     return {
@@ -130,7 +116,6 @@ export interface YouTubeSearchItem {
   views?: number;
 }
 
-/** Raw YouTube search (no metadata rewriting). */
 export async function searchYouTubeRaw(
   query: string,
   limit = 12,

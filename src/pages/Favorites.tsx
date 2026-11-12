@@ -10,19 +10,18 @@ export default function Favorites() {
   const { favorites } = useFavorites();
   const colors = useThemeColors();
   const [searchQuery, setSearchQuery] = useState('');
-  
+
   const favoriteGames = favorites.map((f: string | FavoriteItem) => {
     if (typeof f === 'string') return allGamesList.find(g => g.id === f);
     if (f.source === 'local') return allGamesList.find(g => g.id === f.id);
-    
-    // For external games, construct a compatible object
+
     return {
       id: f.id,
       title: f.title || 'Unknown Game',
       description: f.description || `Play ${f.title} from ${f.source}.`,
       type: 'iframe',
       url: f.url,
-      icon: Gamepad2, // Fallback icon
+      icon: Gamepad2,
       image: f.image,
       source: f.source,
       isExternal: true
@@ -39,9 +38,9 @@ export default function Favorites() {
   });
 
   return (
-    <PageLayout 
-      title="Favorites" 
-      showBack={true} 
+    <PageLayout
+      title="Favorites"
+      showBack={true}
       maxWidth="7xl"
     >
       <div className="mb-8 border-b border-zinc-800 pb-4">
@@ -60,9 +59,9 @@ export default function Favorites() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {filteredGames.length > 0 ? (
             filteredGames.map((game) => (
-              <GameCard 
-                key={game.id} 
-                game={game} 
+              <GameCard
+                key={game.id}
+                game={game}
                 to={game.isExternal ? `/external-player?url=${encodeURIComponent(game.url || '')}&title=${encodeURIComponent(game.title)}&id=${encodeURIComponent(game.id)}&source=${encodeURIComponent(game.source || 'external')}&image=${encodeURIComponent(game.image || '')}&description=${encodeURIComponent(game.description || '')}` : undefined}
               />
             ))

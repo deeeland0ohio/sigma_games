@@ -52,31 +52,30 @@ export default function GamePlayer() {
 
   return (
     <div className={`h-screen w-screen text-zinc-300 font-sans flex flex-col overflow-hidden bg-black ${colors.selection}`}>
-      {/* Top Bar */}
       <header className="border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-md shrink-0 z-50 shadow-sm">
         <div className="w-full px-4 h-16 flex items-center justify-between">
           <Link to="/our-games" className={`flex items-center gap-2 text-zinc-400 hover:${colors.primary} hover:bg-zinc-800 p-2 rounded-lg transition-all font-medium`}>
             <ArrowLeft size={20} />
             <span className="hidden sm:inline">Back to Our Games</span>
           </Link>
-          
+
           <div className="flex items-center gap-3">
             <div className={`p-2 bg-zinc-900 rounded-lg border border-zinc-800 ${colors.tertiary || colors.secondary}`}>
               <game.icon size={18} />
             </div>
             <h1 className="font-bold text-white tracking-tight">{game.title}</h1>
-            <button 
+            <button
               onClick={reloadGame}
               className={`p-2 text-zinc-400 hover:${colors.secondary} hover:bg-zinc-800 rounded-lg transition-all active:rotate-180 duration-500 cursor-pointer`}
               title="Reload Game"
             >
               <RefreshCcw size={18} />
             </button>
-            <button 
+            <button
               onClick={() => game && toggleFavorite(game.id)}
               className={`p-1.5 rounded-lg transition-all cursor-pointer ${
-                isFavorite(game?.id || '') 
-                  ? `${colors.quaternary || colors.secondary} bg-zinc-800/50` 
+                isFavorite(game?.id || '')
+                  ? `${colors.quaternary || colors.secondary} bg-zinc-800/50`
                   : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800'
               }`}
               title={isFavorite(game?.id || '') ? "Remove from Favorites" : "Add to Favorites"}
@@ -96,7 +95,7 @@ export default function GamePlayer() {
               <Github size={20} />
             </a>
             <Credits />
-            <button 
+            <button
               onClick={toggleFullscreen}
               className={`p-2 text-zinc-400 hover:${colors.secondary} hover:bg-zinc-800 rounded-lg transition-colors`}
               title="Toggle Fullscreen"
@@ -108,20 +107,19 @@ export default function GamePlayer() {
         </div>
       </header>
 
-      {/* Game Container */}
       <main className="flex-1 relative w-full h-full">
-        <div 
-          id="game-container" 
+        <div
+          id="game-container"
           className="w-full h-full bg-black flex flex-col items-center justify-center overflow-hidden"
         >
           {game.type === 'iframe' && (iframeUrl || game.srcdoc) ? (
-            <ContentFrame 
+            <ContentFrame
               key={reloadKey}
               src={iframeUrl}
               srcDoc={game.srcdoc}
               title={game.title}
-              className="w-full h-full border-none" 
-              allowFullScreen 
+              className="w-full h-full border-none"
+              allowFullScreen
             />
           ) : (
             <div className="text-center p-8 max-w-md border border-dashed border-zinc-700 rounded-xl bg-zinc-900/50">

@@ -25,7 +25,7 @@ export default function GnMath() {
   const [selectedZone, setSelectedZone] = useState<Zone | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [visibleCount, setVisibleCount] = useState(100);
-  
+
   const { toggleFavorite, isFavorite } = useFavorites();
 
   const loadZones = async () => {
@@ -33,7 +33,7 @@ export default function GnMath() {
     try {
       const res = await fetch("https://cdn.jsdelivr.net/gh/freebuisness/assets@latest/zones.json");
       const raw = await res.json();
-      
+
       const parsedZones = raw
         .filter((z: any) => {
           if (!z || !z.name || !z.url) return false;
@@ -50,14 +50,13 @@ export default function GnMath() {
           url: z.url.replace("{HTML_URL}", HTML_BASE),
           tags: z.special || []
         }));
-      
-      // Sort alphabetically (0-9-a-z)
+
       parsedZones.sort((a: any, b: any) => {
         const nameA = (a.name || "").toLowerCase();
         const nameB = (b.name || "").toLowerCase();
         return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
       });
-      
+
       setZones(parsedZones);
       const allTags = Array.from(new Set(parsedZones.flatMap((z: Zone) => z.tags))) as string[];
       setTags(allTags);
@@ -102,9 +101,9 @@ export default function GnMath() {
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700 focus:border-transparent transition-all"
             />
           </div>
-          
-          <select 
-            value={selectedTag} 
+
+          <select
+            value={selectedTag}
             onChange={(e) => setSelectedTag(e.target.value)}
             className="w-full sm:w-auto bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-zinc-700 focus:border-transparent transition-all min-w-[150px]"
           >
@@ -113,7 +112,7 @@ export default function GnMath() {
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
-          
+
           <button
             onClick={loadZones}
             className="w-full sm:w-auto px-4 py-3 rounded-lg font-medium bg-zinc-800 text-white hover:bg-zinc-700 transition-colors border border-zinc-700 flex items-center justify-center gap-2"
@@ -154,7 +153,7 @@ export default function GnMath() {
                 );
               })}
             </div>
-              
+
             {visibleCount < filteredZones.length && (
               <div className="flex justify-center mt-6">
                 <button
@@ -176,7 +175,6 @@ export default function GnMath() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedZone && (
           <motion.div
@@ -230,7 +228,7 @@ export default function GnMath() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

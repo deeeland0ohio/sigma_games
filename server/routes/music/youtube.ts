@@ -2,16 +2,6 @@ import { MusicTrackResult, StreamResolutionResult, formatSeconds } from "./types
 import { resolveYouTubeAudioStream, searchYouTubeRaw } from "./youtubeStream";
 import { resolveFullLengthAudio } from "./fullLength";
 
-/**
- * YouTube source.
- *
- * The track the user clicked always has a video id, so playback is that exact
- * video. If Google refuses to hand out the audio (very common from a server
- * IP), we look for a *verified* copy of the same recording rather than playing
- * a random result of the same title.
- */
-
-/** Pull "artist - title" out of the usual YouTube title soup. */
 export function extractActualSongInfo(rawTitle: string, author?: string): { title: string; artist: string; searchQueries: string[] } {
   let text = rawTitle || "";
 
@@ -54,7 +44,6 @@ export function extractActualSongInfo(rawTitle: string, author?: string): { titl
 }
 
 export async function searchYouTube(query: string, limit = 30): Promise<MusicTrackResult[]> {
-  // Keep real videos only: shorts and multi-hour compilations are noise.
   const videos = (await searchYouTubeRaw(query, limit + 10)).filter(
     (video) => video.duration >= 45 && video.duration <= 900
   );
@@ -86,7 +75,6 @@ export async function resolveYouTubeTrack(track: {
 }, deadline?: number): Promise<StreamResolutionResult | null> {
   const videoId = String(track.id || track.rawId || "").replace(/^yt_/, "");
 
-  // 1. The exact video the user clicked.
   if (/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
     const stream = await resolveYouTubeAudioStream(videoId, deadline);
     if (stream?.url) {
@@ -100,7 +88,6 @@ export async function resolveYouTubeTrack(track: {
     }
   }
 
-  // 2. The same recording, verified, from another backend.
   return resolveFullLengthAudio(
     { title: track.name, artist: track.artist, duration: track.duration },
     deadline

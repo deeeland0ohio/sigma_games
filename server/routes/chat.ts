@@ -2,20 +2,17 @@ import { Router } from "express";
 
 const router = Router();
 
-// In-memory Chat storage & active bans
 const chatMessages: any[] = [];
 const activeBannedUserIds: Record<string, number> = {};
 const activeBannedNicknames: Record<string, number> = {};
 let sseClients: any[] = [];
 
-// Check whether Ably is configured (disabled / removed in favor of free server-native SSE)
 router.get("/ably-check", (req, res) => {
   res.json({
     configured: false
   });
 });
 
-// SSE Endpoint for server-native streaming (100% free, unlimited, no API keys required!)
 router.get("/chat/sse", (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -30,7 +27,6 @@ router.get("/chat/sse", (req, res) => {
   });
 });
 
-// Broadcast router for chat rooms (saves history in Node memory and relays via SSE stream)
 router.post("/chat/broadcast", async (req, res) => {
   try {
     const payload = req.body;
@@ -38,7 +34,6 @@ router.post("/chat/broadcast", async (req, res) => {
       return res.status(400).json({ error: "Invalid payload" });
     }
 
-    // Update in-memory storage based on transaction types
     if (payload.type === 'chat_message') {
       if (chatMessages.length >= 100) chatMessages.shift();
       chatMessages.push(payload);
@@ -62,12 +57,10 @@ router.post("/chat/broadcast", async (req, res) => {
       }
     }
 
-    // Broadcast via internal SSE stream (supports instant, zero-limit cost-free realtime)
     sseClients.forEach(c => {
       try {
         c.res.write(`data: ${JSON.stringify(payload)}\n\n`);
       } catch (e) {
-        // clean up failed clients
       }
     });
 
@@ -78,7 +71,6 @@ router.post("/chat/broadcast", async (req, res) => {
   }
 });
 
-// Retrieve message history & current ban states from server cache
 router.get("/chat/history", (req, res) => {
   res.json({
     messages: chatMessages,

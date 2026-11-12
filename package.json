@@ -9,8 +9,7 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
-    "prepare:games": "tsx scripts/prepare-games.mts"
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

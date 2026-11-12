@@ -20,20 +20,19 @@ export default function UgsFiles() {
     try {
       const res = await fetch("https://cdn.jsdelivr.net/gh/bubbls/ugs-singlefile@main/games.js");
       const text = await res.text();
-      
+
       const match = text.match(/let files = \[(.*?)\];/s);
       if (match) {
         const arrayText = `[${match[1]}]`;
         const stringMatches = [...arrayText.matchAll(/"([^"]+)"|'([^']+)'/g)];
         const parsedFiles = stringMatches.map(m => m[1] || m[2]).filter(f => f !== '?');
-        
-        // Sort alphabetically (0-9-a-z) by their formatted names
+
         parsedFiles.sort((a, b) => {
           const nameA = formatFileName(a).toLowerCase();
           const nameB = formatFileName(b).toLowerCase();
           return nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
         });
-        
+
         setFiles(parsedFiles);
       }
     } catch (e) {
@@ -86,7 +85,7 @@ export default function UgsFiles() {
               className="w-full bg-zinc-900 border border-zinc-800 rounded-lg pl-10 pr-4 py-3 text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-700 focus:border-transparent transition-all"
             />
           </div>
-          
+
           <button
             onClick={loadFiles}
             className="w-full sm:w-auto px-4 py-3 rounded-lg font-medium bg-zinc-800 text-white hover:bg-zinc-700 transition-colors border border-zinc-700 flex items-center justify-center gap-2"
@@ -105,7 +104,7 @@ export default function UgsFiles() {
             {displayedFiles.map((f, index) => {
               const displayName = formatFileName(f);
               const gameId = `ugs:${displayName}`;
-              
+
               return (
                 <SourceGameCard
                   key={`${f}-${index}`}
@@ -129,14 +128,14 @@ export default function UgsFiles() {
                 />
               );
             })}
-            
+
             {displayedFiles.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredFiles.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -151,7 +150,6 @@ export default function UgsFiles() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedFile && (
           <motion.div
@@ -206,7 +204,7 @@ export default function UgsFiles() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

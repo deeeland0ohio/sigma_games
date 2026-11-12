@@ -6,19 +6,19 @@ interface LightspeedConfig {
   density: number;
 }
 
-export default function LightspeedBackground({ 
-  color1, 
-  color2, 
-  color3, 
-  color4, 
+export default function LightspeedBackground({
+  color1,
+  color2,
+  color3,
+  color4,
   palette,
   power = 1.0,
   config = { speed: 50, size: 50, density: 50 }
-}: { 
-  color1: string, 
-  color2: string, 
-  color3?: string, 
-  color4?: string, 
+}: {
+  color1: string,
+  color2: string,
+  color3?: string,
+  color4?: string,
   palette?: string[],
   power?: number,
   config?: LightspeedConfig
@@ -50,7 +50,7 @@ export default function LightspeedBackground({
     let width = window.innerWidth;
     let height = window.innerHeight;
     let dpr = window.devicePixelRatio || 1;
-    
+
     canvas.style.width = width + 'px';
     canvas.style.height = height + 'px';
     canvas.width = Math.floor(width * dpr);
@@ -72,8 +72,8 @@ export default function LightspeedBackground({
 
     const resetStar = (star: { x: number, y: number, z: number, color: string, warpStartZ: number }) => {
       const angle = Math.random() * Math.PI * 2;
-      // Keep stars away from the center ONLY when clicking/warping
-      const minR = warpFactor > 0.1 ? Math.min(width, height) * 0.25 : 0; 
+
+      const minR = warpFactor > 0.1 ? Math.min(width, height) * 0.25 : 0;
       const maxR = Math.max(width, height) * 1.5;
       const r = minR + Math.random() * (maxR - minR);
       star.x = Math.cos(angle) * r;
@@ -92,17 +92,17 @@ export default function LightspeedBackground({
       width = window.innerWidth;
       height = window.innerHeight;
       dpr = window.devicePixelRatio || 1;
-      
+
       canvas.style.width = width + 'px';
       canvas.style.height = height + 'px';
       canvas.width = Math.floor(width * dpr);
       canvas.height = Math.floor(height * dpr);
       ctx.scale(dpr, dpr);
-      
+
       for (let i = 0; i < numStars; i++) {
         const star = { x: 0, y: 0, z: 0, color: pickColor(), warpStartZ: 0 };
         resetStar(star);
-        star.z = Math.random() * width; // Randomize initial depth
+        star.z = Math.random() * width;
         star.warpStartZ = star.z;
         stars.push(star);
       }
@@ -117,7 +117,7 @@ export default function LightspeedBackground({
         return;
       }
       isMouseDown = true;
-      // Anchor the start of the tail to current position when clicking
+
       stars.forEach(star => {
         star.warpStartZ = star.z;
       });
@@ -144,77 +144,62 @@ export default function LightspeedBackground({
       const speedFactor = configSpeed / 50;
       const sizeFactor = configSize / 50;
 
-      // 5.0 seconds to reach max speed when clicking
-      // 1.5 seconds to slow down when releasing
       if (isMouseDown) {
         warpFactor = Math.min(1, warpFactor + dt / 5.0);
       } else {
         warpFactor = Math.max(0, warpFactor - dt / 1.5);
       }
 
-      // Dark background with a fast trail effect to prevent stamped circles
       ctx.globalCompositeOperation = 'source-over';
       ctx.globalAlpha = 1.0;
-      ctx.fillStyle = `rgba(0, 0, 0, 0.4)`; 
+      ctx.fillStyle = `rgba(0, 0, 0, 0.4)`;
       ctx.fillRect(0, 0, width, height);
 
-      // Calculate speed based on warp factor and power (reduced to 75% of original speed)
-      const baseSpeed = 2.25 * powerRef.current * speedFactor; // Faster base speed so it's not blank
+      const baseSpeed = 2.25 * powerRef.current * speedFactor;
       const warpSpeed = warpFactor * 90 * powerRef.current * speedFactor;
       const speed = baseSpeed + warpSpeed;
 
       const fov = width;
 
-      // Enable bright glowing overlap
       ctx.globalCompositeOperation = 'lighter';
 
       for (let i = 0; i < stars.length; i++) {
         const star = stars[i];
-        
-        // Move star towards camera
+
         star.z -= speed;
 
-        // If the star passes the camera or goes too far off-screen, reset it
         if (star.z <= 0 || Math.abs(star.x) > width * 2 || Math.abs(star.y) > height * 2) {
           resetStar(star);
           continue;
         }
-        
-        // Current 2D projection
+
         const x = (star.x / star.z) * fov + width / 2;
         const y = (star.y / star.z) * fov + height / 2;
-        
-        // Calculate tail length
-        // The tail stretches back to where the star was when the click started
+
         let stretchZ = star.z + speed * 2;
         if (warpFactor > 0) {
           const warpTailZ = star.z + (star.warpStartZ - star.z) * warpFactor;
           stretchZ = Math.max(stretchZ, warpTailZ);
         }
-        
+
         const px = (star.x / stretchZ) * fov + width / 2;
         const py = (star.y / stretchZ) * fov + height / 2;
 
-        // Size the star based on how close it is (shrunk by 25%)
-        // NO size increase during warp
         const radius = Math.max(0.375, (1 - star.z / width) * 2.25) * sizeFactor;
-        
-        // Fade in stars as they get closer
+
         let opacity = Math.max(0.1, 1 - star.z / width);
 
-        // Make them really bright and glowy when speeding up (clicking)
         let glowAlpha = 0.3;
         let intenseGlow = false;
         if (warpFactor > 0) {
-          const closeness = Math.max(0, 1 - star.z / (width * 0.5)); 
-          // Boost opacity massively based on warp factor and closeness
+          const closeness = Math.max(0, 1 - star.z / (width * 0.5));
+
           opacity = Math.min(1, opacity + (warpFactor * 2) + (closeness * warpFactor * 3));
-          // Boost glow alpha to make it intensely bright
+
           glowAlpha = Math.min(1, 0.3 + (warpFactor * 2) + (closeness * warpFactor * 2));
           intenseGlow = warpFactor > 0.2;
         }
 
-        // Create a gradient for the fading tail
         let strokeStyle: string | CanvasGradient = star.color;
         if (Math.abs(x - px) > 0.1 || Math.abs(y - py) > 0.1) {
           const grad = ctx.createLinearGradient(x, y, px, py);
@@ -223,7 +208,6 @@ export default function LightspeedBackground({
           strokeStyle = grad;
         }
 
-        // 1. Draw the stretched tail (core line)
         ctx.globalAlpha = opacity;
         ctx.beginPath();
         ctx.lineCap = "round";
@@ -232,10 +216,9 @@ export default function LightspeedBackground({
         ctx.moveTo(px, py);
         ctx.lineTo(x, y);
         ctx.stroke();
-        // Double stroke the core line for extreme brightness during warp
-        if (intenseGlow) ctx.stroke(); 
 
-        // 2. Draw a thicker, fainter line for the glow effect along the whole tail
+        if (intenseGlow) ctx.stroke();
+
         ctx.globalAlpha = opacity * glowAlpha;
         ctx.beginPath();
         ctx.lineCap = "round";
@@ -244,21 +227,19 @@ export default function LightspeedBackground({
         ctx.moveTo(px, py);
         ctx.lineTo(x, y);
         ctx.stroke();
-        
-        // 3. Add an extra wide, faint bloom effect when going fast
+
         if (intenseGlow) {
           ctx.lineWidth = radius * 6;
           ctx.globalAlpha = opacity * glowAlpha * 0.4;
-          ctx.stroke(); 
+          ctx.stroke();
         }
 
-        // 4. Draw the bright head dot
         ctx.globalAlpha = opacity;
         ctx.beginPath();
         ctx.arc(x, y, radius * 1.5, 0, Math.PI * 2);
         ctx.fillStyle = star.color;
         ctx.fill();
-        // Double fill the head dot for extreme brightness
+
         if (intenseGlow) ctx.fill();
       }
 
@@ -278,8 +259,8 @@ export default function LightspeedBackground({
   }, [color1, color2, color3, color4]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
+    <canvas
+      ref={canvasRef}
       className="fixed inset-0 -z-10 pointer-events-none bg-black"
     />
   );

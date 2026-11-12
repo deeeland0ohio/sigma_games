@@ -1,12 +1,6 @@
 import { MusicTrackResult, StreamResolutionResult, formatSeconds } from "./types";
 import { resolveFullLengthAudio } from "./fullLength";
 
-/**
- * Deezer is a metadata catalog here: the public API gives titles, artwork,
- * durations and a 30-second preview, and nothing else. Full audio may come from
- * a verified full-length backend, and if there is no verified match the
- * preview is the correct answer — it is the actual song, just short.
- */
 export async function searchDeezer(query: string, limit = 30): Promise<MusicTrackResult[]> {
   try {
     const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=${limit}`, {

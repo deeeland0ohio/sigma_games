@@ -5,8 +5,8 @@ import { useTheme } from '../context/ThemeContext';
 import { SettingsContent } from '../pages/Settings';
 
 export default function SettingsOverlay() {
-  const { 
-    isSettingsOpen, 
+  const {
+    isSettingsOpen,
     setIsSettingsOpen,
     settingsBoxSize: size,
     setSettingsBoxSize: setSize,
@@ -79,11 +79,11 @@ export default function SettingsOverlay() {
             onClick={() => setIsSettingsOpen(false)}
             className="absolute inset-0 bg-black/40 backdrop-blur-[2px] pointer-events-auto"
           />
-          
+
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ 
-              opacity: 1, 
+            animate={{
+              opacity: 1,
               scale: 1,
               left: position.x,
               top: position.y,
@@ -95,8 +95,7 @@ export default function SettingsOverlay() {
             className="absolute bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden pointer-events-auto select-none"
             style={{ minWidth: 300, minHeight: 300 }}
           >
-            {/* Drag Handle / Header */}
-            <div 
+            <div
               className="flex items-center justify-between p-4 border-b border-zinc-800 bg-zinc-900/50 cursor-move active:cursor-grabbing"
               onMouseDown={(e) => {
                 if ((e.target as HTMLElement).closest('button')) return;
@@ -130,18 +129,16 @@ export default function SettingsOverlay() {
                 <X size={20} />
               </button>
             </div>
-            
+
             <div className="flex-1 p-6 scrollbar-thin scrollbar-thumb-zinc-800 select-text overflow-y-auto min-w-[300px] min-h-0">
               <SettingsContent />
             </div>
 
-            {/* Resize Handles */}
             <div className="absolute top-0 left-0 w-2 h-full cursor-ew-resize" onMouseDown={(e) => handleResize('left', e)} />
             <div className="absolute top-0 right-0 w-2 h-full cursor-ew-resize" onMouseDown={(e) => handleResize('right', e)} />
             <div className="absolute top-0 left-0 w-full h-2 cursor-ns-resize" onMouseDown={(e) => handleResize('top', e)} />
             <div className="absolute bottom-0 left-0 w-full h-2 cursor-ns-resize" onMouseDown={(e) => handleResize('bottom', e)} />
-            
-            {/* Corners */}
+
             <div className="absolute top-0 left-0 w-4 h-4 cursor-nwse-resize" onMouseDown={(e) => handleResize('topleft', e)} />
             <div className="absolute top-0 right-0 w-4 h-4 cursor-nesw-resize" onMouseDown={(e) => handleResize('topright', e)} />
             <div className="absolute bottom-0 left-0 w-4 h-4 cursor-nesw-resize" onMouseDown={(e) => handleResize('bottomleft', e)} />

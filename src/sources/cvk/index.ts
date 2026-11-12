@@ -1,4 +1,3 @@
-// Chicken King's Vault (CVK) Games Library
 export interface CvkGameItem {
   title: string;
   url: string;

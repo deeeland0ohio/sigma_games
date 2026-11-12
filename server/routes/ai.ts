@@ -1,48 +1,21 @@
 import { Router, Request, Response } from "express";
 
-/**
- * AI proxy — the server half of the AI chat.
- *
- * The rule this file exists to enforce:
- *   API keys live in server environment variables and nowhere else.
- *
- * How a request flows:
- *   browser (src/ai/AiChat.tsx)
- *     -> POST /api/ai/chat            (no key, just the conversation)
- *       -> this router adds `Authorization: Bearer <secret key>`
- *         -> upstream AI API (Groq / Emis)
- *       <- answer streamed back to the browser
- *
- * The browser can therefore be inspected all day and never see a key. Nothing
- * under src/ knows a key exists, so nothing under src/ can leak one.
- */
-
 const aiRouter = Router();
-
-/* ------------------------------------------------------------------ *
- * 1. Config
- * ------------------------------------------------------------------ */
 
 const EMIS_BASE_URL = (process.env.EMIS_BASE_URL || "https://emis.zxs-is-very.cool/v1").replace(/\/+$/, "");
 const GROQ_BASE_URL = (process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
 
-const UPSTREAM_TIMEOUT_MS = 45_000; // time allowed to get an answer started
-const KEY_COOLDOWN_MS = 60_000; // how long a rate-limited key sits out
-const PROVIDER_COOLDOWN_MS = 60_000; // how long a broken provider sits out
-const MODELS_CACHE_MS = 10 * 60_000; // model lists barely change
+const UPSTREAM_TIMEOUT_MS = 45_000;
+const KEY_COOLDOWN_MS = 60_000;
+const PROVIDER_COOLDOWN_MS = 60_000;
+const MODELS_CACHE_MS = 10 * 60_000;
 
 const DEFAULT_GROQ_MODEL = "openai/gpt-oss-120b";
 const DEFAULT_EMIS_MODEL = "claude-fable-5-1";
 
-// Emis blocks requests without a browser-looking User-Agent.
 const BROWSER_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
-/**
- * Reads a key list from one or more env vars.
- * Accepts "key1,key2", "key1 key2", "key1;key2" or one key per line, because
- * pasting a list into a dashboard always produces a slightly different format.
- */
 function readKeyList(...names: string[]): string[] {
   const keys: string[] = [];
   for (const name of names) {
@@ -56,21 +29,10 @@ function readKeyList(...names: string[]): string[] {
   return keys;
 }
 
-// Read on every call instead of once at the top of the file: server.ts loads
-// .env *after* the module imports have already run, so a top-level read would
-// see nothing on a fresh `npm run dev`. Reading process.env is cheap.
 const groqKeys = () => readKeyList("GROQ_API_KEYS", "GROQ_API_KEY");
 const emisKey = () => (process.env.EMIS_API_KEY || "").trim();
 const hasGroq = () => groqKeys().length > 0;
 const hasEmis = () => emisKey().length > 0;
-
-/* ------------------------------------------------------------------ *
- * 2. Health bookkeeping
- *    Plain memory, reset whenever the server restarts. A key that gets
- *    rate limited is skipped for a minute instead of being retried into
- *    the same error, and a provider that errors is retried a minute later
- *    instead of being disabled forever.
- * ------------------------------------------------------------------ */
 
 const keyCooldownUntil = new Map<string, number>();
 let nextGroqKeyIndex = 0;
@@ -93,7 +55,6 @@ function coolDownKey(key: string, ms = KEY_COOLDOWN_MS): void {
   console.warn(`[ai] Groq key ...${key.slice(-6)} resting for ${Math.round(ms / 1000)}s`);
 }
 
-/** Groq keys in the order we should try them: healthy first, rotating each request. */
 function orderedGroqKeys(): string[] {
   const keys = groqKeys();
   if (keys.length <= 1) return keys;
@@ -110,10 +71,6 @@ function coolDownEmis(reason: string): void {
   console.warn(`[ai] Emis resting for ${PROVIDER_COOLDOWN_MS / 1000}s (${reason})`);
 }
 
-/* ------------------------------------------------------------------ *
- * 3. Model catalogs
- * ------------------------------------------------------------------ */
-
 interface ModelInfo {
   id: string;
   label?: string;
@@ -127,7 +84,6 @@ interface ModelInfo {
   video?: boolean;
 }
 
-// Shown when Groq's /models call fails or no key is configured yet.
 const GROQ_FALLBACK_MODELS: ModelInfo[] = [
   { id: "openai/gpt-oss-120b", label: "GPT OSS 120B (Recommended)", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning on Groq LPUs." },
   { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput." },
@@ -138,7 +94,6 @@ const GROQ_FALLBACK_MODELS: ModelInfo[] = [
   { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." },
 ];
 
-// Shown when Emis is unreachable or has no key configured yet.
 const DEFAULT_EMIS_MODELS: ModelInfo[] = [
   { id: "claude-fable-5-1", label: "Claude Fable 5.1 (Recommended)", owned_by: "anthropic", description: "Fast, creative writing and high-intelligence assistance." },
   { id: "claude-sonnet-5", label: "Claude Sonnet 5", owned_by: "anthropic", description: "Smart, nuanced, and excellent at coding." },
@@ -157,7 +112,6 @@ const DEFAULT_EMIS_MODELS: ModelInfo[] = [
 let emisModelsCache: { at: number; models: ModelInfo[] } | null = null;
 let groqModelsCache: { at: number; models: ModelInfo[] } | null = null;
 
-/** One upstream call with the secret key attached and a hard timeout. */
 function upstreamFetch(url: string, key: string, init: RequestInit = {}) {
   return fetch(url, {
     ...init,
@@ -170,7 +124,6 @@ function upstreamFetch(url: string, key: string, init: RequestInit = {}) {
   });
 }
 
-/** Pull a readable message out of an upstream error body. */
 async function readErrorMessage(response: globalThis.Response, fallback: string): Promise<string> {
   try {
     const text = await response.text();
@@ -188,8 +141,8 @@ async function readErrorMessage(response: globalThis.Response, fallback: string)
 function isGroqChatModel(model: any): boolean {
   if (!model || model.active === false) return false;
   const id = String(model.id || "").toLowerCase();
-  if (id.includes("guard")) return false; // safety classifiers can't stream chat
-  if (id.includes("whisper") || id.includes("orpheus")) return false; // audio
+  if (id.includes("guard")) return false;
+  if (id.includes("whisper") || id.includes("orpheus")) return false;
   const outputs = model.output_modalities;
   if (Array.isArray(outputs) && (!outputs.includes("text") || outputs.includes("speech") || outputs.includes("transcription"))) {
     return false;
@@ -204,7 +157,7 @@ async function fetchGroqModels(): Promise<ModelInfo[]> {
   for (const key of orderedGroqKeys()) {
     try {
       const response = await upstreamFetch(`${GROQ_BASE_URL}/models`, key);
-      if (!response.ok) continue; // bad key for example; try the next one
+      if (!response.ok) continue;
       const data: any = await response.json();
       const chatModels = Array.isArray(data?.data) ? data.data.filter(isGroqChatModel) : [];
       if (chatModels.length === 0) continue;
@@ -279,10 +232,6 @@ async function fetchEmisModels(): Promise<ModelInfo[]> {
   }
 }
 
-/* ------------------------------------------------------------------ *
- * 4. Chat calls
- * ------------------------------------------------------------------ */
-
 interface ChatOptions {
   stream: boolean;
   temperature?: number;
@@ -291,10 +240,10 @@ interface ChatOptions {
 
 interface ChatResult {
   ok: boolean;
-  upstream: globalThis.Response | null; // set when ok
+  upstream: globalThis.Response | null;
   model: string;
-  error: string; // set when !ok
-  status: number; // HTTP status to use when !ok
+  error: string;
+  status: number;
   allExhausted: boolean;
 }
 
@@ -326,11 +275,6 @@ function chatBody(model: string, messages: any[], options: ChatOptions) {
   });
 }
 
-/**
- * Groq: try the requested model, then a known-good one, across every key we
- * hold. Keys are free-tier accounts, so "this key is out of daily tokens" is
- * normal and the next key usually just works.
- */
 async function attemptGroq(model: string, messages: any[], options: ChatOptions): Promise<ChatResult> {
   const keys = orderedGroqKeys();
   if (keys.length === 0) {
@@ -340,7 +284,7 @@ async function attemptGroq(model: string, messages: any[], options: ChatOptions)
   const available = await fetchGroqModels();
   const availableIds = available.map((m) => m.id);
   const wanted = availableIds.includes(model) ? model : DEFAULT_GROQ_MODEL;
-  // A model can be retired upstream at any time, so keep a couple of spares.
+
   const candidates = [wanted, DEFAULT_GROQ_MODEL, ...availableIds]
     .filter((id, index, all) => all.indexOf(id) === index)
     .slice(0, 5);
@@ -369,25 +313,21 @@ async function attemptGroq(model: string, messages: any[], options: ChatOptions)
         lastStatus = response.status;
         const lower = message.toLowerCase();
 
-        // Bad / exhausted key -> rest it and try the next key.
         if (response.status === 401 || response.status === 402 || response.status === 429) {
           coolDownKey(key);
           continue;
         }
 
-        // Model retired or overloaded -> try the next model.
         if (response.status === 404 || response.status === 503 || lower.includes("does not exist") || lower.includes("not available")) {
           modelUnsupported = true;
           break;
         }
 
-        // Anything else mentioning the model is also a model problem.
         if (response.status === 400 && lower.includes("model")) {
           modelUnsupported = true;
           break;
         }
 
-        // A real request error (bad messages, too long): no point retrying.
         return chatFailed(message, 400, false);
       } catch (err: any) {
         lastMessage = err?.message || "Could not reach Groq";
@@ -433,7 +373,6 @@ async function attemptEmis(model: string, messages: any[], options: ChatOptions)
   }
 }
 
-/** Copy the upstream SSE stream to the browser chunk by chunk. */
 async function pipeStream(upstream: globalThis.Response, res: Response): Promise<void> {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -448,8 +387,6 @@ async function pipeStream(upstream: globalThis.Response, res: Response): Promise
   const reader = upstream.body.getReader();
   const decoder = new TextDecoder();
 
-  // If the user hits Stop, the browser drops the response. Cancel the
-  // upstream read too so we stop paying for tokens nobody will see.
   res.on("close", () => {
     reader.cancel().catch(() => {});
   });
@@ -467,11 +404,6 @@ async function pipeStream(upstream: globalThis.Response, res: Response): Promise
   }
 }
 
-/* ------------------------------------------------------------------ *
- * 5. Routes
- * ------------------------------------------------------------------ */
-
-/** GET /api/ai/models — model pickers for both providers. */
 aiRouter.get("/ai/models", async (req: Request, res: Response) => {
   const provider = String(req.query.provider || "all").toLowerCase();
 
@@ -491,11 +423,6 @@ aiRouter.get("/ai/models", async (req: Request, res: Response) => {
   });
 });
 
-/**
- * POST /api/ai/chat
- * Body: { provider: "emis" | "groq", model, messages, stream?, systemPrompt? }
- * Streams the answer back (or returns JSON when stream:false).
- */
 aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
   const body = req.body || {};
   const { messages, systemPrompt } = body;
@@ -517,11 +444,9 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
     max_tokens: body.max_tokens,
   };
 
-  // Explicit provider wins; otherwise infer it from the model id.
   const looksLikeGroq = /^(openai\/gpt-oss|qwen|allam-|llama-?[0-9]|llama-3|deepseek-r1|gemma|mixtral|mistral)/i.test(requestedModel);
   let provider: "groq" | "emis" = requestedProvider === "groq" ? "groq" : requestedProvider === "emis" ? "emis" : looksLikeGroq ? "groq" : "emis";
 
-  // If the chosen provider has no key while the other one does, start there.
   if (provider === "emis" && !emisAvailable() && hasGroq()) provider = "groq";
   else if (provider === "groq" && !hasGroq() && hasEmis()) provider = "emis";
 
@@ -530,7 +455,6 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
       ? attemptGroq(requestedModel || DEFAULT_GROQ_MODEL, conversation, options)
       : attemptEmis(requestedModel || DEFAULT_EMIS_MODEL, conversation, options);
 
-  // One retry on the other provider. That is the whole failover story.
   const firstProvider = provider;
   const first = await run(firstProvider);
   const fallback: "groq" | "emis" = firstProvider === "emis" ? "groq" : "emis";
@@ -553,8 +477,6 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
     console.warn(`[ai] ${firstProvider} unavailable (${first.error}); answered with ${fallback} instead.`);
   }
 
-  // Tell the UI when it is not getting exactly what it asked for, so it can
-  // update the model label instead of silently showing the wrong one.
   res.setHeader("Access-Control-Expose-Headers", "x-switched-provider, x-switched-model, x-original-provider, x-original-model, x-fallback-reason");
   if (switchedFrom) {
     res.setHeader("x-switched-provider", usedProvider);
@@ -577,10 +499,6 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
   return res.json(data);
 });
 
-/**
- * GET /api/ai/health — "are my Cloud Run keys actually working?"
- * Booleans only: it never returns a key or part of one.
- */
 aiRouter.get("/ai/health", (_req: Request, res: Response) => {
   const keys = groqKeys();
   const emisUp = emisAvailable();

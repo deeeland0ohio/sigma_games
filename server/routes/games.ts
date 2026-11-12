@@ -5,7 +5,6 @@ import { cvkGames } from "../../src/sources/cvk";
 
 const router = Router();
 
-// API endpoints for game libraries to support static unblocked loaders
 router.get("/diesmos-games", (req, res) => {
   res.json(diesmosGames);
 });

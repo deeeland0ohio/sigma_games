@@ -19,7 +19,7 @@ export default function DiesmosGames() {
   const loadGames = async () => {
     setLoading(true);
     try {
-      const sorted = [...initialDiesmosGames].sort((a, b) => 
+      const sorted = [...initialDiesmosGames].sort((a, b) =>
         (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
       );
       setGames(sorted);
@@ -47,7 +47,7 @@ export default function DiesmosGames() {
     setSelectedGame(game);
   };
 
-  const filteredGames = games.filter(g => 
+  const filteredGames = games.filter(g =>
     (g.title || g.url).toLowerCase().includes(search.toLowerCase())
   );
   const displayedGames = filteredGames.slice(0, visibleCount);
@@ -86,7 +86,7 @@ export default function DiesmosGames() {
               const displayName = g.title || formatFileName(g.url.split('/').pop() || g.url);
               const imageSrc = g.image || null;
               const gameId = `diesmos:${displayName}`;
-              
+
               return (
                 <SourceGameCard
                   key={`${g.url}-${index}`}
@@ -109,14 +109,14 @@ export default function DiesmosGames() {
                 />
               );
             })}
-            
+
             {displayedGames.length === 0 && (
               <div className="col-span-full flex flex-col items-center justify-center py-20 text-zinc-500">
                 <Box className="w-12 h-12 mb-4 opacity-20" />
                 <p>No titles found matching your search.</p>
               </div>
             )}
-            
+
             {visibleCount < filteredGames.length && (
               <div className="col-span-full flex justify-center mt-6">
                 <button
@@ -131,7 +131,6 @@ export default function DiesmosGames() {
         )}
       </div>
 
-      {/* Fullscreen Player Overlay */}
       <AnimatePresence>
         {selectedGame && (
           <motion.div
@@ -187,7 +186,7 @@ export default function DiesmosGames() {
                 </button>
               </div>
             </div>
-            
+
             <div className="flex-1 w-full bg-black relative">
               <ContentFrame
                 key={reloadKey}

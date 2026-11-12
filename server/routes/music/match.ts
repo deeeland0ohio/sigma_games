@@ -1,24 +1,7 @@
-/**
- * Recording identity.
- *
- * The music sources are catalogs of *metadata* (Deezer, iTunes, YouTube,
- * SoundCloud) and the audio often has to come from somewhere else. That is
- * where "right name, right cover art, wrong song" comes from: a search on
- * another catalog returns a cover, a remix, a sped-up edit or an instrumental,
- * and we play it under the original's title.
- *
- * Everything here exists to answer one question:
- *   "is this candidate really the same recording as the track the user picked?"
- *
- * Title + artist + duration must all agree, and the candidate may not carry an
- * alteration marker (cover/karaoke/remix/sped up/...) that the original does
- * not have. If we cannot prove identity, the caller must NOT use that audio.
- */
-
 export interface TrackIdentity {
   title?: string;
   artist?: string;
-  duration?: number; // seconds
+  duration?: number;
 }
 
 export interface Candidate extends TrackIdentity {
@@ -33,10 +16,6 @@ const STOP_WORDS = new Set([
   "hd", "hq", "4k", "explicit", "clean", "mv", "m", "v",
 ]);
 
-/**
- * Words that mean "this is a different recording". If a candidate has one of
- * these and the original does not, the candidate is rejected.
- */
 const ALTERATION_MARKERS = [
   "cover", "covered", "instrumental", "karaoke", "acapella", "a cappella",
   "remix", "rmx", "bootleg", "mashup", "medley", "megamix",
@@ -65,7 +44,6 @@ function contentWords(text: string): string[] {
     .filter((w) => w.length > 1 && !STOP_WORDS.has(w));
 }
 
-/** 0..1 — how close two titles are. 1 means identical after normalisation. */
 export function titleScore(a: string, b: string): number {
   const na = normalize(a);
   const nb = normalize(b);
@@ -80,22 +58,12 @@ export function titleScore(a: string, b: string): number {
   for (const word of setA) if (setB.has(word)) common++;
   const jaccard = common / (setA.size + setB.size - common);
 
-  // "Blinding Lights" vs "Blinding Lights Remastered" should count as a match;
-  // the alteration check is what rejects genuinely different recordings.
   const oneContainsOther =
     [...setA].every((w) => setB.has(w)) || [...setB].every((w) => setA.has(w));
 
   return Math.max(jaccard, oneContainsOther ? 0.9 : 0);
 }
 
-/**
- * Every meaningful word of `targetTitle` appears in `candidateTitle`.
- *
- * User uploads conventionally append the artist to the title
- * ("Let Down - Radiohead"), which a plain similarity score punishes even
- * though the recording is the right one. Extra words are allowed; missing
- * words are not, so a shorter or different title fails.
- */
 export function titleCovers(targetTitle: string, candidateTitle: string): boolean {
   const target = new Set(contentWords(targetTitle));
   const candidate = new Set(contentWords(candidateTitle));
@@ -109,40 +77,29 @@ function alterationMarkers(text: string): string[] {
   return ALTERATION_MARKERS.filter((marker) => words.has(marker));
 }
 
-/** "Drake, Future feat. X" -> "Drake". Collabs are listed inconsistently. */
 function primaryArtist(artist: string): string {
   return (artist || "").split(/,|&|;|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bx\b/i)[0].trim();
 }
 
-/** Is the target's artist actually credited on this candidate? */
 export function artistMatches(targetArtist: string | undefined, candidateArtist: string, candidateTitle: string): boolean {
   const primary = primaryArtist(targetArtist || "");
   const targetWords = contentWords(primary).filter((w) => w.length > 2);
-  if (targetWords.length === 0) return true; // no artist known: rely on title + duration
+  if (targetWords.length === 0) return true;
 
   const pool = ` ${normalize(candidateArtist)} ${normalize(candidateTitle)} `;
-  // Channels glue names together ("TheWeekndVEVO"), so compare both the
-  // spaced and the compact form. Every part of the primary artist must appear.
+
   const compactPool = pool.replace(/ /g, "");
   return targetWords.every(
     (word) => pool.includes(` ${word} `) || pool.includes(` ${word}s `) || compactPool.includes(word)
   );
 }
 
-/** Durations agree within 4% (min 4s). Unknown durations are not evidence either way. */
 export function durationMatches(targetDuration?: number, candidateDuration?: number): boolean {
   if (!targetDuration || !candidateDuration) return true;
   const tolerance = Math.max(4, targetDuration * 0.04);
   return Math.abs(targetDuration - candidateDuration) <= tolerance;
 }
 
-/**
- * The one gate every audio candidate has to pass, plus the reason it failed.
- *
- * Returning the reasons (instead of a bare boolean) is what makes
- * `/api/music/debug` able to say "rejected: artist, duration" for a candidate
- * instead of leaving us guessing why a track fell back to a preview.
- */
 export function identityMismatch(candidate: Candidate, target: TrackIdentity): string[] {
   if (!candidate.title || !target.title) return ["title-missing"];
 
@@ -151,10 +108,6 @@ export function identityMismatch(candidate: Candidate, target: TrackIdentity): s
   if (!artistMatches(target.artist, candidate.artist || "", candidate.title)) reasons.push("artist");
   if (!durationMatches(target.duration, candidate.duration)) reasons.push("duration");
 
-  // An altered recording is only acceptable when the user asked for it,
-  // e.g. a track literally titled "... (Remix)".
-  // A candidate cannot be shorter than the song by more than the tolerance;
-  // that is how 30-second previews used to slip in as "full" tracks.
   const allowed = new Set(alterationMarkers(target.title));
   const extra = alterationMarkers(candidate.title).filter((m) => !allowed.has(m));
   if (extra.length > 0) reasons.push(`altered:${extra.join(",")}`);
@@ -166,7 +119,6 @@ export function isSameRecording(candidate: Candidate, target: TrackIdentity): bo
   return identityMismatch(candidate, target).length === 0;
 }
 
-/** Search terms for finding a track on another catalog, best first. */
 export function buildQueries(identity: TrackIdentity): string[] {
   const title = (identity.title || "").trim();
   const artist = primaryArtist(identity.artist || "");
