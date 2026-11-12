@@ -104,12 +104,20 @@ export function identityMismatch(candidate: Candidate, target: TrackIdentity): s
   if (!candidate.title || !target.title) return ["title-missing"];
 
   const reasons: string[] = [];
-  if (titleScore(candidate.title, target.title) < 0.85) reasons.push("title");
-  if (!artistMatches(target.artist, candidate.artist || "", candidate.title)) reasons.push("artist");
-  if (!durationMatches(target.duration, candidate.duration)) reasons.push("duration");
+  const score = titleScore(candidate.title, target.title);
+  const lengthsAgree = durationMatches(target.duration, candidate.duration);
 
   const allowed = new Set(alterationMarkers(target.title));
   const extra = alterationMarkers(candidate.title).filter((m) => !allowed.has(m));
+
+  if (score < 0.85) reasons.push("title");
+
+  const credited = artistMatches(target.artist, candidate.artist || "", candidate.title);
+  const sameTrackByName =
+    score === 1 && lengthsAgree && extra.length === 0 && Boolean(target.duration) && Boolean(candidate.duration);
+  if (!credited && !sameTrackByName) reasons.push("artist");
+
+  if (!lengthsAgree) reasons.push("duration");
   if (extra.length > 0) reasons.push(`altered:${extra.join(",")}`);
 
   return reasons;
