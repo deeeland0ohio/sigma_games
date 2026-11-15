@@ -26,6 +26,17 @@ const FFMPEG_CANDIDATES = [
 const AUDIO_CACHE_DIR = path.join(os.tmpdir(), "sigma-music-cache");
 const AUDIO_CACHE_TTL = 90 * 60_000;
 
+// YouTube refuses datacenter addresses, so allow a cookies file or a proxy to be supplied.
+const YTDLP_COOKIES = process.env.YTDLP_COOKIES || "";
+const YTDLP_PROXY = process.env.YTDLP_PROXY || "";
+
+function ytdlpFlags(): string[] {
+  const flags = ["--no-warnings"];
+  if (YTDLP_COOKIES) flags.push("--cookies", YTDLP_COOKIES);
+  if (YTDLP_PROXY) flags.push("--proxy", YTDLP_PROXY);
+  return flags;
+}
+
 const SOURCES = ["tidal", "ytm", "scdlp"] as const;
 type Source = (typeof SOURCES)[number];
 
@@ -122,7 +133,7 @@ async function ytdlpJson(searchTarget: string): Promise<any[]> {
   const binary = await ytdlpBinary();
   if (!binary) throw new Error("yt-dlp is not installed");
 
-  const raw = await runYtdlp(binary, ["-J", "--flat-playlist", "--no-warnings", searchTarget]);
+  const raw = await runYtdlp(binary, ["-J", "--flat-playlist", ...ytdlpFlags(), searchTarget]);
   const parsed = JSON.parse(raw);
   return Array.isArray(parsed?.entries) ? parsed.entries : [];
 }
@@ -207,7 +218,7 @@ async function downloadAudio(target: string): Promise<CachedAudio> {
       [
         "-f",
         "bestaudio/best",
-        "--no-warnings",
+        ...ytdlpFlags(),
         "--no-playlist",
         ...(ffmpeg && path.isAbsolute(ffmpeg) ? ["--ffmpeg-location", path.dirname(ffmpeg)] : []),
         "-o",
@@ -305,7 +316,7 @@ async function resolveUpstream(target: string): Promise<{ kind: "url" | "file"; 
     const binary = await ytdlpBinary();
     if (!binary) throw new Error("yt-dlp is not installed");
 
-    const raw = await runYtdlp(binary, ["-g", "-f", "bestaudio/best", "--no-warnings", target]);
+    const raw = await runYtdlp(binary, ["-g", "-f", "bestaudio/best", ...ytdlpFlags(), target]);
     const url = raw.split("\n").map((line) => line.trim()).find((line) => line.startsWith("http"));
 
     if (url && !url.includes("m3u8")) return { kind: "url", value: url };
@@ -486,6 +497,8 @@ musicRouter.get("/ping", async (_req: Request, res: Response) => {
     sources: SOURCES,
     ytdlp: binary ? path.basename(binary) : null,
     ffmpeg: (await ffmpegBinary()) ? path.basename((await ffmpegBinary()) as string) : null,
+    cookies: Boolean(YTDLP_COOKIES),
+    proxy: Boolean(YTDLP_PROXY),
     tidal: Boolean(TIDAL_CLIENT_ID)
   });
 });
