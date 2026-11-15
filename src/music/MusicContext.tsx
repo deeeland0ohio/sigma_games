@@ -558,63 +558,17 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       let resolvedDuration = track.duration;
       let backendStreamUrl = '';
 
-      const targetId = track.rawId || track.id;
-      const trackSource = track.source || (String(track.id).startsWith('octave_') ? 'octave' : 'soundcloud');
-
       if (!audioUrl || audioUrl.startsWith('/api/music/url')) {
-        try {
-          const queryParams = new URLSearchParams({
-            id: String(track.id || targetId),
-            name: track.name || '',
-            artist: track.artist || '',
-            previewUrl: track.previewUrl || '',
-            source: trackSource,
-            duration: String(track.duration || 0),
-            isSpedUp: track.isSpedUp ? '1' : '0',
-            isSlowed: track.isSlowed ? '1' : '0'
-          });
-          const res = await fetch(`/api/music/url?${queryParams.toString()}`, { signal }).catch(() => null);
-          if (playRequestIdRef.current !== currentRequestId) return;
-
-          if (res && res.ok) {
-            const data = await res.json().catch(() => ({}));
-            audioUrl = data.url;
-            backendStreamUrl = data.streamUrl || '';
-            if ((!track.duration || track.duration === 0) && data.duration && data.duration > 0) {
-              resolvedDuration = data.duration;
-              setDuration(data.duration);
-            }
+        const clientStream = await resolveClientTrackAudio(track).catch(() => ({ url: '', duration: 0 }));
+        if (clientStream.url) {
+          audioUrl = clientStream.url;
+          if (clientStream.duration && (!resolvedDuration || resolvedDuration === 0)) {
+            resolvedDuration = clientStream.duration;
+            setDuration(clientStream.duration);
           }
-        } catch (err) {
-          console.warn('[MusicContext] Backend URL resolve failed, using client fallback:', err);
+        } else if (track.previewUrl) {
+          audioUrl = track.previewUrl;
         }
-
-        if (!audioUrl) {
-          const clientStream = await resolveClientTrackAudio(track);
-          if (clientStream.url) {
-            audioUrl = clientStream.url;
-            if (clientStream.duration && (!resolvedDuration || resolvedDuration === 0)) {
-              resolvedDuration = clientStream.duration;
-              setDuration(clientStream.duration);
-            }
-          } else if (track.previewUrl && trackSource === 'deezer') {
-            audioUrl = track.previewUrl;
-          }
-        }
-      }
-
-      if (playRequestIdRef.current !== currentRequestId) return;
-
-      if (!picUrl || picUrl.startsWith('/api/music/pic')) {
-        try {
-          const picRes = await fetch(`/api/music/pic?id=${encodeURIComponent(String(targetId))}`, { signal }).catch(() => null);
-          if (playRequestIdRef.current === currentRequestId && picRes && picRes.ok) {
-            const picData = await picRes.json().catch(() => ({}));
-            if (picData?.url) {
-              picUrl = picData.url;
-            }
-          }
-        } catch {}
       }
 
       if (playRequestIdRef.current !== currentRequestId) return;

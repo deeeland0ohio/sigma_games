@@ -1,12 +1,21 @@
 import { ClientMusicTrack } from "./types";
+import { fetchClientAudius, resolveClientAudiusTrack } from "./audius";
+import { fetchClientApple, resolveClientAppleTrack } from "./itunes";
 
-const noResults = async (_query?: string, _page?: number, _limit?: number): Promise<ClientMusicTrack[]> => [];
+export { fetchClientAudius, fetchClientApple };
 
-export const fetchClientDeezer = noResults;
-export const fetchClientOctave = noResults;
-export const fetchClientYouTube = noResults;
-export const fetchClientSoundCloud = noResults;
+export async function resolveClientTrackAudio(track: any): Promise<{ url: string; duration?: number }> {
+  const source = String(track.source || "").toLowerCase();
+  const id = String(track.rawId || track.id || "");
 
-export async function resolveClientTrackAudio(_track: any): Promise<{ url: string; duration?: number }> {
+  if (source === "audius" || id.startsWith("audius_")) {
+    return resolveClientAudiusTrack(track);
+  }
+  if (source === "apple" || id.startsWith("apple_")) {
+    return resolveClientAppleTrack(track);
+  }
+  if (typeof track.previewUrl === "string" && track.previewUrl.startsWith("http")) {
+    return { url: track.previewUrl };
+  }
   return { url: "", duration: 0 };
 }

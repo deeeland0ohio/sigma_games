@@ -1,12 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMusic, MusicTrack } from './MusicContext';
 import { useThemeColors } from '../context/ThemeContext';
-import {
-  fetchClientDeezer,
-  fetchClientOctave,
-  fetchClientYouTube,
-  fetchClientSoundCloud
-} from './clientMusicFallback';
+import { fetchClientAudius, fetchClientApple } from './sources';
 import {
   Play,
   Pause,
@@ -36,7 +31,7 @@ const isPlatformName = (str?: string) => {
   return ['soundcloud', 'youtube', 'youtube music', 'octave', 'apple music', 'deezer', 'yt'].includes(s);
 };
 
-export type MusicSource = 'octave' | 'youtube' | 'soundcloud' | 'deezer';
+export type MusicSource = 'audius' | 'apple';
 
 interface SourceOption {
   id: MusicSource;
@@ -48,29 +43,15 @@ interface SourceOption {
 
 const SOURCES: SourceOption[] = [
   {
-    id: 'octave',
-    name: 'Apple Music',
+    id: 'audius',
+    name: 'Audius',
     colorClass: 'text-purple-400',
     activeBg: 'bg-purple-500/20 border-purple-500/40 text-purple-300 shadow-purple-500/10',
     icon: <Zap size={14} className="text-purple-400" />
   },
   {
-    id: 'youtube',
-    name: 'YouTube Music',
-    colorClass: 'text-red-400',
-    activeBg: 'bg-red-500/20 border-red-500/40 text-red-300 shadow-red-500/10',
-    icon: <Radio size={14} className="text-red-400" />
-  },
-  {
-    id: 'soundcloud',
-    name: 'SoundCloud',
-    colorClass: 'text-orange-400',
-    activeBg: 'bg-orange-500/20 border-orange-500/40 text-orange-300 shadow-orange-500/10',
-    icon: <Disc size={14} className="text-orange-400" />
-  },
-  {
-    id: 'deezer',
-    name: 'Deezer',
+    id: 'apple',
+    name: 'Apple Music',
     colorClass: 'text-pink-400',
     activeBg: 'bg-pink-500/20 border-pink-500/40 text-pink-300 shadow-pink-500/10',
     icon: <Headphones size={14} className="text-pink-400" />
@@ -106,7 +87,7 @@ export default function MusicSection() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
-  const [musicSource, setMusicSource] = useState<MusicSource>('soundcloud');
+  const [musicSource, setMusicSource] = useState<MusicSource>('audius');
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
@@ -114,18 +95,10 @@ export default function MusicSection() {
   }, []);
 
   const fetchClientBySource = async (source: MusicSource, query: string, pageNum: number, limit = 30): Promise<any[]> => {
-    switch (source) {
-      case 'deezer':
-        return fetchClientDeezer(query, pageNum, limit);
-      case 'octave':
-        return fetchClientOctave(query, pageNum, limit);
-      case 'youtube':
-        return fetchClientYouTube(query, pageNum, limit);
-      case 'soundcloud':
-        return fetchClientSoundCloud(query, pageNum, limit);
-      default:
-        return fetchClientDeezer(query, pageNum, limit);
+    if (source === 'apple') {
+      return fetchClientApple(query, pageNum, limit);
     }
+    return fetchClientAudius(query, pageNum, limit);
   };
 
   const loadTrendingMusic = async (source = musicSource) => {
@@ -134,27 +107,15 @@ export default function MusicSection() {
     setLoadFailed(false);
     setPage(1);
     try {
-      const endpoint = `/api/music/trending?source=${source}&limit=30`;
-      const res = await fetch(endpoint).catch(() => null);
-      if (res && res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (Array.isArray(data.songs) && data.songs.length > 0) {
-          setSearchResults(data.songs);
-          setHasMore(data.songs.length >= 30);
-          return;
-        }
-      }
-
-      const fallbackSongs = await fetchClientBySource(source, '', 1, 30);
-      setSearchResults(fallbackSongs);
-      setHasMore(fallbackSongs.length >= 30);
-      setLoadFailed(fallbackSongs.length === 0);
+      const songs = await fetchClientBySource(source, '', 1, 30);
+      setSearchResults(songs);
+      setHasMore(songs.length >= 30);
+      setLoadFailed(songs.length === 0);
     } catch (err) {
-      console.warn('Backend trending fetch failed, fallback to client API:', err);
-      const fallbackSongs = await fetchClientBySource(source, '', 1, 30);
-      setSearchResults(fallbackSongs);
-      setHasMore(fallbackSongs.length >= 30);
-      setLoadFailed(fallbackSongs.length === 0);
+      console.warn('Trending fetch failed:', err);
+      setSearchResults([]);
+      setHasMore(false);
+      setLoadFailed(true);
     } finally {
       setIsSearching(false);
     }
@@ -176,29 +137,15 @@ export default function MusicSection() {
     setHasSearched(true);
 
     try {
-      const endpoint = `/api/music/search?keyword=${encodeURIComponent(query)}&source=${source}&page=1&limit=30`;
-      const res = await fetch(endpoint).catch(() => null);
-      if (res && res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (Array.isArray(data.songs) && data.songs.length > 0) {
-          setSearchResults(data.songs);
-          if (data.songs.length < 30) {
-            setHasMore(false);
-          }
-          return;
-        }
-      }
-
-      const fallbackSongs = await fetchClientBySource(source, query, 1, 30);
-      setSearchResults(fallbackSongs);
-      setHasMore(fallbackSongs.length >= 30);
-      setLoadFailed(fallbackSongs.length === 0);
+      const songs = await fetchClientBySource(source, query, 1, 30);
+      setSearchResults(songs);
+      setHasMore(songs.length >= 30);
+      setLoadFailed(songs.length === 0);
     } catch (err) {
-      console.warn('Backend search failed, fallback to client API:', err);
-      const fallbackSongs = await fetchClientBySource(source, query, 1, 30);
-      setSearchResults(fallbackSongs);
-      setHasMore(fallbackSongs.length >= 30);
-      setLoadFailed(fallbackSongs.length === 0);
+      console.warn('Search failed:', err);
+      setSearchResults([]);
+      setHasMore(false);
+      setLoadFailed(true);
     } finally {
       setIsSearching(false);
     }
@@ -220,43 +167,17 @@ export default function MusicSection() {
     setIsLoadingMore(true);
 
     try {
-      const query = searchQuery.trim();
-      const endpoint = query
-        ? `/api/music/search?keyword=${encodeURIComponent(query)}&source=${musicSource}&page=${nextPage}&limit=30`
-        : `/api/music/trending?source=${musicSource}&limit=30&page=${nextPage}`;
-
-      const res = await fetch(endpoint).catch(() => null);
-      if (res && res.ok) {
-        const data = await res.json().catch(() => ({}));
-        if (Array.isArray(data.songs) && data.songs.length > 0) {
-          setSearchResults(prev => [...prev, ...data.songs]);
-          setPage(nextPage);
-          if (data.songs.length < 30) {
-            setHasMore(false);
-          }
-          return;
-        }
-      }
-
-      const fallbackSongs = await fetchClientBySource(musicSource, query, nextPage, 30);
-      if (fallbackSongs.length > 0) {
-        setSearchResults(prev => [...prev, ...fallbackSongs]);
+      const songs = await fetchClientBySource(musicSource, searchQuery.trim(), nextPage, 30);
+      if (songs.length > 0) {
+        setSearchResults(prev => [...prev, ...songs]);
         setPage(nextPage);
-        setHasMore(fallbackSongs.length >= 30);
+        setHasMore(songs.length >= 30);
       } else {
         setHasMore(false);
       }
     } catch (err) {
-      console.warn('Backend load more failed, fallback to client API:', err);
-      const query = searchQuery.trim();
-      const fallbackSongs = await fetchClientBySource(musicSource, query, nextPage, 30);
-      if (fallbackSongs.length > 0) {
-        setSearchResults(prev => [...prev, ...fallbackSongs]);
-        setPage(nextPage);
-        setHasMore(fallbackSongs.length >= 30);
-      } else {
-        setHasMore(false);
-      }
+      console.warn('Load more failed:', err);
+      setHasMore(false);
     } finally {
       setIsLoadingMore(false);
     }
