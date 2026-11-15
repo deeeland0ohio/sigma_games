@@ -484,27 +484,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         }
       }).catch(async (err) => {
         clearTimeout(safetyTimer);
-        console.warn('Direct audio play catch, trying proxy fallback:', err);
-
-        if (!audioUrl.startsWith('/api/music/proxy') && audioUrl.startsWith('http')) {
-          try {
-            const proxyUrl = `/api/music/proxy?url=${encodeURIComponent(audioUrl)}`;
-            if (audioRef.current && (expectedRequestId === undefined || playRequestIdRef.current === expectedRequestId)) {
-              audioRef.current.src = proxyUrl;
-              audioRef.current.load();
-              await audioRef.current.play();
-              setIsPlaying(true);
-              setIsLoadingAudio(false);
-              if (!hasResolved) {
-                hasResolved = true;
-                resolve(true);
-              }
-              return;
-            }
-          } catch (proxyErr) {
-            console.warn('Proxy fallback playback failed:', proxyErr);
-          }
-        }
+        console.warn('Playback failed:', err);
 
         setIsLoadingAudio(false);
         if (!hasResolved) {

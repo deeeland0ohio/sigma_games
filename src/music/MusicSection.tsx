@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMusic, MusicTrack } from './MusicContext';
 import { useThemeColors } from '../context/ThemeContext';
-import { fetchClientAudius, fetchClientApple } from './sources';
+
 import {
   Play,
   Pause,
@@ -95,10 +95,16 @@ export default function MusicSection() {
   }, []);
 
   const fetchClientBySource = async (source: MusicSource, query: string, pageNum: number, limit = 30): Promise<any[]> => {
-    if (source === 'apple') {
-      return fetchClientApple(query, pageNum, limit);
-    }
-    return fetchClientAudius(query, pageNum, limit);
+    const params = new URLSearchParams({
+      q: query,
+      source,
+      page: String(pageNum),
+      limit: String(limit)
+    });
+    const res = await fetch(`/api/music/search?${params.toString()}`);
+    if (!res.ok) throw new Error(`music ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    return Array.isArray(data.songs) ? data.songs : [];
   };
 
   const loadTrendingMusic = async (source = musicSource) => {

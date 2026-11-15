@@ -1,0 +1,45 @@
+let cachedTicket = "";
+let cachedExpiry = 0;
+let pendingTicket: Promise<string> | null = null;
+
+export async function getMusicTicket(forceReset = false): Promise<string> {
+  if (!forceReset && cachedTicket && cachedExpiry > Date.now() + 30_000) {
+    return cachedTicket;
+  }
+
+  if (!forceReset && pendingTicket) return pendingTicket;
+
+  pendingTicket = (async () => {
+    const res = await fetch("/api/music/ticket");
+    if (!res.ok) throw new Error(`ticket ${res.status}`);
+    const data = await res.json();
+    cachedTicket = String(data.ticket || "");
+    cachedExpiry = Date.now() + Math.max(0, Number(data.expiresIn) || 0) * 1000;
+    return cachedTicket;
+  })();
+
+  try {
+    return await pendingTicket;
+  } finally {
+    pendingTicket = null;
+  }
+}
+
+export async function getMusicStreamUrl(track: any): Promise<string> {
+  const id = String(track.rawId || track.id || "").replace(/^(audius|apple)_/, "");
+  const source = String(track.source || "audius").toLowerCase();
+  if (!id) return "";
+
+  const ticket = await getMusicTicket().catch(() => "");
+  if (!ticket) return "";
+
+  const params = new URLSearchParams({ id, source, k: ticket });
+  if (source === "apple" && typeof track.previewUrl === "string" && track.previewUrl) {
+    params.set("preview", track.previewUrl);
+  }
+  return `/api/music/stream?${params.toString()}`;
+}
+
+export function isTicketRejected(status: number): boolean {
+  return status === 401;
+}
