@@ -34,6 +34,8 @@ export async function getMusicStreamUrl(track: any, forceTicket = false): Promis
   if (!ticket) return "";
 
   const params = new URLSearchParams({ id, source, k: ticket });
+  if (typeof track.name === "string" && track.name) params.set("name", track.name);
+  if (typeof track.artist === "string" && track.artist) params.set("artist", track.artist);
   if (typeof track.ref === "string" && track.ref) params.set("ref", track.ref);
   if (typeof track.previewUrl === "string" && track.previewUrl) params.set("preview", track.previewUrl);
   return `/api/music/stream?${params.toString()}`;

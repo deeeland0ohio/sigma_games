@@ -486,7 +486,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           setIsLoadingAudio(false);
           resolve(false);
         }
-      }, 9000);
+      }, 20000);
 
       audioRef.current.src = audioUrl;
       audioRef.current.load();
@@ -506,6 +506,27 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       }).catch(async (err) => {
         clearTimeout(safetyTimer);
         console.warn('Playback failed:', err);
+
+        // Resolving the stream can outlive the click's autoplay gesture, so start muted
+        // (always allowed) and unmute once playback is running.
+        if (err?.name === 'NotAllowedError' && audioRef.current) {
+          const wasMuted = audioRef.current.muted;
+          try {
+            audioRef.current.muted = true;
+            await audioRef.current.play();
+            audioRef.current.muted = wasMuted;
+            setIsPlaying(true);
+            setIsLoadingAudio(false);
+            if (!hasResolved) {
+              hasResolved = true;
+              resolve(true);
+            }
+            return;
+          } catch (retryError) {
+            audioRef.current.muted = wasMuted;
+            console.warn('Muted playback retry failed:', retryError);
+          }
+        }
 
         setIsLoadingAudio(false);
         if (!hasResolved) {
@@ -569,6 +590,28 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           }
         } else if (track.previewUrl) {
           audioUrl = track.previewUrl;
+        }
+      }
+
+      // The server may have to resolve a fresh upstream, so wait for it to be ready
+      // before handing the URL to the <audio> element (which gives up quickly).
+      if (audioUrl.startsWith('/api/music/stream')) {
+        const warm = await fetch(audioUrl, { headers: { Range: 'bytes=0-0' }, signal }).catch(() => null);
+
+        if (warm && warm.status === 401) {
+          const refreshed = await resolveClientTrackAudio(track, true).catch(() => ({ url: '' }));
+          if (refreshed.url && playRequestIdRef.current === currentRequestId) audioUrl = refreshed.url;
+        } else if (warm && !warm.ok) {
+          const reason = await warm.json().catch(() => ({}));
+          if (playRequestIdRef.current !== currentRequestId) return;
+          setIsLoadingAudio(false);
+          setIsPlaying(false);
+          setPlaybackError(
+            typeof reason?.error === 'string' && reason.error
+              ? `This track could not be played: ${reason.error}.`
+              : 'This track could not be played. Try the same song on another source.'
+          );
+          return;
         }
       }
 

@@ -11,7 +11,7 @@ export default function MusicPage() {
         {!acknowledged ? (
           <div className="flex min-h-[60vh] flex-col items-center justify-center text-center px-4">
             <h1 className="text-2xl sm:text-4xl font-bold text-white tracking-tight uppercase leading-snug max-w-3xl">
-              AUDIUS PLAYS FULL TRACKS, APPLE MUSIC PLAYS 30-SECOND PREVIEWS
+TIDAL YOUTUBE AND SOUNDCLOUD: WHEN A SOURCE IS BLOCKED, AUDIO IS MATCHED FROM ANOTHER
             </h1>
             <button
               onClick={() => setAcknowledged(true)}

@@ -240,6 +240,48 @@ async function downloadAudio(target: string): Promise<CachedAudio> {
   }
 }
 
+async function youtubeMatch(query: string): Promise<{ kind: "url" | "file"; value: string } | null> {
+  const trimmed = cleanMatchQuery(query);
+  if (!trimmed) return null;
+
+  try {
+    const entries = await ytdlpJson(`ytsearch1:${trimmed}`);
+    const song = youtubeSong(entries[0]);
+    if (!song) return null;
+    return await resolveUpstream(`https://www.youtube.com/watch?v=${song.rawId}`);
+  } catch {
+    return null;
+  }
+}
+
+function cleanMatchQuery(value: string): string {
+  return value
+    .replace(/\((?:[^)]*)\)|\[(?:[^\]]*)\]/g, " ")
+    .replace(/\b(official|audio|video|lyrics?|visuali[sz]er|hd|hq|4k|mv|remaster(ed)?|explicit)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 90);
+}
+
+async function soundcloudFallback(query: string): Promise<{ kind: "url" | "file"; value: string } | null> {
+  const trimmed = cleanMatchQuery(query);
+  if (!trimmed) return null;
+
+  try {
+    const entries = await ytdlpJson(`scsearch5:${trimmed}`);
+    const candidates = entries
+      .map(soundcloudSong)
+      .filter((song: Song | null): song is Song => Boolean(song?.ref))
+      .filter((song) => song.duration > 0 && song.duration <= 900);
+
+    const song = candidates[0];
+    if (!song?.ref) return null;
+    return await resolveUpstream(song.ref);
+  } catch {
+    return null;
+  }
+}
+
 async function resolveUpstream(target: string): Promise<{ kind: "url" | "file"; value: string }> {
   try {
     const binary = await ytdlpBinary();
@@ -323,6 +365,8 @@ async function tidalSearch(query: string, limit: number, offset: number): Promis
 function youtubeSong(entry: any): Song | null {
   const rawId = String(entry?.id || "");
   if (!/^[\w-]{6,20}$/.test(rawId)) return null;
+  // Hour-long compilations are not songs and take forever to resolve.
+  if (Math.round(entry?.duration || 0) > 3600) return null;
 
   const thumbnails: any[] = Array.isArray(entry.thumbnails) ? entry.thumbnails : [];
   const pic = thumbnails.length ? thumbnails[thumbnails.length - 1]?.url : undefined;
@@ -372,7 +416,14 @@ async function searchCatalogue(source: Source, query: string, limit: number, off
     if (source === "tidal") return tidalSearch(trimmed, limit, offset);
 
     const target = `${source === "scdlp" ? "scsearch" : "ytsearch"}${limit + offset}:${trimmed}`;
-    const entries = await ytdlpJson(target);
+    let entries: any[];
+    try {
+      entries = await ytdlpJson(target);
+    } catch (error) {
+      // yt-dlp search gets rate limited now and then; one quiet retry usually clears it.
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      entries = await ytdlpJson(target);
+    }
     const mapper = source === "scdlp" ? soundcloudSong : youtubeSong;
 
     return entries
@@ -437,7 +488,8 @@ musicRouter.get("/search", async (req: Request, res: Response) => {
     const songs = await searchCatalogue(source, query, limit, (page - 1) * limit);
     res.json({ songs, items: songs, total: songs.length, source, page });
   } catch (error) {
-    res.status(502).json({ songs: [], items: [], total: 0, source, error: String(error) });
+    // Keep the page usable: an unavailable source is an empty list with a reason, not a hard failure.
+    res.json({ songs: [], items: [], total: 0, source, page, error: String(error) });
   }
 });
 
@@ -459,6 +511,9 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
   const source = readSource(req.query.source);
   const rawId = String(req.query.id ?? "").replace(/^(tidal|ytm|scdlp)_/, "");
 
+  const name = String(req.query.name ?? "").slice(0, 120);
+  const artist = String(req.query.artist ?? "").slice(0, 120);
+
   let target = "";
   try {
     if (source === "ytm") {
@@ -475,12 +530,9 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
       }
       target = ref;
     } else {
+      // Tidal is a catalogue: audio for its tracks is matched on another source.
       const preview = String(req.query.preview ?? "");
-      if (!/^https:\/\/[a-z0-9.-]*tidal\.com\//.test(preview)) {
-        res.status(424).json({ error: TIDAL_ACCOUNT_TOKEN ? "playback not available" : "tidal playback needs TIDAL_ACCOUNT_TOKEN" });
-        return;
-      }
-      target = preview;
+      target = /^https:\/\/[a-z0-9.-]*tidal\.com\//.test(preview) ? preview : "";
     }
   } catch {
     res.status(400).json({ error: "bad request" });
@@ -488,12 +540,35 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
   }
 
   try {
+    let upstream: { kind: "url" | "file"; value: string } | null = null;
+
     if (source === "tidal") {
-      await proxyAudio(target, req, res);
-      return;
+      upstream =
+        (target ? await resolveUpstream(target).catch(() => null) : null) ??
+        (await youtubeMatch(`${artist} ${name}`)) ??
+        (await soundcloudFallback(`${artist} ${name}`));
+
+      if (!upstream) {
+        res.status(424).json({ error: "no audio match for this track" });
+        return;
+      }
+      res.set("X-Music-Match", "external");
+    } else {
+      try {
+        upstream = await resolveUpstream(target);
+      } catch (error) {
+        // YouTube is blocked on plenty of hosts, so borrow SoundCloud audio for the same song.
+        if (source === "ytm") {
+          const fallback = await soundcloudFallback(`${artist} ${name}`);
+          if (!fallback) throw error;
+          res.set("X-Music-Fallback", "soundcloud");
+          upstream = fallback;
+        } else {
+          throw error;
+        }
+      }
     }
 
-    const upstream = await resolveUpstream(target);
     if (upstream.kind === "file") {
       res.set("Content-Type", CONTENT_TYPES[path.extname(upstream.value).toLowerCase()] || "audio/mpeg");
       res.sendFile(upstream.value, { acceptRanges: true });
