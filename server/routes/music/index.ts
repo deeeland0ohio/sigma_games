@@ -209,7 +209,7 @@ async function downloadAudio(target: string): Promise<CachedAudio> {
         "bestaudio/best",
         "--no-warnings",
         "--no-playlist",
-        ...(ffmpeg ? ["--ffmpeg-location", path.dirname(ffmpeg)] : []),
+        ...(ffmpeg && path.isAbsolute(ffmpeg) ? ["--ffmpeg-location", path.dirname(ffmpeg)] : []),
         "-o",
         output,
         target
@@ -240,18 +240,18 @@ async function downloadAudio(target: string): Promise<CachedAudio> {
   }
 }
 
-async function youtubeMatch(query: string): Promise<{ kind: "url" | "file"; value: string } | null> {
-  const trimmed = cleanMatchQuery(query);
-  if (!trimmed) return null;
-
-  try {
-    const entries = await ytdlpJson(`ytsearch1:${trimmed}`);
-    const song = youtubeSong(entries[0]);
-    if (!song) return null;
-    return await resolveUpstream(`https://www.youtube.com/watch?v=${song.rawId}`);
-  } catch {
-    return null;
+async function youtubeMatch(name: string, artist = ""): Promise<{ kind: "url" | "file"; value: string } | null> {
+  for (const query of matchQueries(artist, name)) {
+    try {
+      const entries = await ytdlpJson(`ytsearch1:${query}`);
+      const song = youtubeSong(entries[0]);
+      if (!song) continue;
+      return await resolveUpstream(`https://www.youtube.com/watch?v=${song.rawId}`);
+    } catch {
+      /* try the next, shorter query */
+    }
   }
+  return null;
 }
 
 function cleanMatchQuery(value: string): string {
@@ -263,23 +263,41 @@ function cleanMatchQuery(value: string): string {
     .slice(0, 90);
 }
 
-async function soundcloudFallback(query: string): Promise<{ kind: "url" | "file"; value: string } | null> {
-  const trimmed = cleanMatchQuery(query);
-  if (!trimmed) return null;
+function describeFailure(error: unknown): string {
+  const text = String(error);
+  if (/sign in to confirm|not a bot|cookies/i.test(text)) return "the source blocks this server";
+  if (/not installed/i.test(text)) return "yt-dlp is not installed here";
+  if (/timed? ?out|ETIMEDOUT/i.test(text)) return "the source timed out";
+  if (/private video|unavailable|removed/i.test(text)) return "that upload is gone";
+  return "the source did not return audio";
+}
 
-  try {
-    const entries = await ytdlpJson(`scsearch5:${trimmed}`);
-    const candidates = entries
-      .map(soundcloudSong)
-      .filter((song: Song | null): song is Song => Boolean(song?.ref))
-      .filter((song) => song.duration > 0 && song.duration <= 900);
+function matchQueries(...parts: string[]): string[] {
+  const attempts = [
+    cleanMatchQuery(parts.join(" ")),
+    cleanMatchQuery(parts.filter(Boolean).slice(0, 8).join(" ")),
+    cleanMatchQuery(parts[0] || "")
+  ];
+  return [...new Set(attempts.filter((query) => query.length > 2))];
+}
 
-    const song = candidates[0];
-    if (!song?.ref) return null;
-    return await resolveUpstream(song.ref);
-  } catch {
-    return null;
+async function soundcloudFallback(name: string, artist = ""): Promise<{ kind: "url" | "file"; value: string } | null> {
+  for (const query of matchQueries(artist, name)) {
+    try {
+      const entries = await ytdlpJson(`scsearch5:${query}`);
+      const candidates = entries
+        .map(soundcloudSong)
+        .filter((song: Song | null): song is Song => Boolean(song?.ref))
+        .filter((song) => song.duration > 20 && song.duration <= 600)
+        .sort((a, b) => a.duration - b.duration);
+
+      const song = candidates[0];
+      if (song?.ref) return await resolveUpstream(song.ref);
+    } catch {
+      /* try the next, shorter query */
+    }
   }
+  return null;
 }
 
 async function resolveUpstream(target: string): Promise<{ kind: "url" | "file"; value: string }> {
@@ -513,6 +531,7 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
 
   const name = String(req.query.name ?? "").slice(0, 120);
   const artist = String(req.query.artist ?? "").slice(0, 120);
+  const trackDuration = Number(req.query.duration) || 0;
 
   let target = "";
   try {
@@ -545,8 +564,8 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
     if (source === "tidal") {
       upstream =
         (target ? await resolveUpstream(target).catch(() => null) : null) ??
-        (await youtubeMatch(`${artist} ${name}`)) ??
-        (await soundcloudFallback(`${artist} ${name}`));
+        (await youtubeMatch(name, artist)) ??
+        (await soundcloudFallback(name, artist));
 
       if (!upstream) {
         res.status(424).json({ error: "no audio match for this track" });
@@ -555,12 +574,20 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
       res.set("X-Music-Match", "external");
     } else {
       try {
+        // A two hour radio mix has no sensible single-file match; fail fast instead of downloading it.
+        if (source === "ytm" && trackDuration > 900) {
+          res.status(424).json({ error: "that upload is too long to stream" });
+          return;
+        }
         upstream = await resolveUpstream(target);
       } catch (error) {
         // YouTube is blocked on plenty of hosts, so borrow SoundCloud audio for the same song.
         if (source === "ytm") {
-          const fallback = await soundcloudFallback(`${artist} ${name}`);
-          if (!fallback) throw error;
+          const fallback = await soundcloudFallback(name, artist);
+          if (!fallback) {
+            res.status(424).json({ error: describeFailure(error) });
+            return;
+          }
           res.set("X-Music-Fallback", "soundcloud");
           upstream = fallback;
         } else {
@@ -577,7 +604,7 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
 
     await proxyAudio(upstream.value, req, res);
   } catch (error) {
-    res.status(502).json({ error: `resolver failed: ${String(error)}` });
+    res.status(424).json({ error: describeFailure(error) });
   }
 });
 
