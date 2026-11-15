@@ -95,7 +95,8 @@ export default function MusicSection() {
     currentTime,
     duration,
     seek,
-    isLoadingAudio
+    isLoadingAudio,
+    playbackError
   } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -426,6 +427,12 @@ export default function MusicSection() {
               <span>{formatTime(duration)}</span>
             </div>
           </div>
+
+          {playbackError && (
+            <div className="text-xs text-red-300 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5">
+              {playbackError}
+            </div>
+          )}
         </div>
       </div>
 

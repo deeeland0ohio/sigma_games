@@ -1,6 +1,6 @@
 import { fetchClientDeezer, resolveClientDeezerTrack } from "./deezer";
 import { fetchClientOctave, resolveClientOctaveTrack } from "./octave";
-import { fetchClientYouTube, resolveClientYouTubeTrack } from "./youtube";
+import { fetchClientYouTube } from "./youtube";
 import { fetchClientSoundCloud } from "./soundcloud";
 
 export {
@@ -9,7 +9,6 @@ export {
   fetchClientOctave,
   resolveClientOctaveTrack,
   fetchClientYouTube,
-  resolveClientYouTubeTrack,
   fetchClientSoundCloud
 };
 
@@ -18,7 +17,7 @@ export async function resolveClientTrackAudio(track: any): Promise<{ url: string
   const id = String(track.rawId || track.id || "");
 
   if (source === "youtube" || id.startsWith("yt_")) {
-    return resolveClientYouTubeTrack(track);
+    return { url: "", duration: 0 };
   }
   if (source === "deezer" || id.startsWith("dz_")) {
     return resolveClientDeezerTrack(track);

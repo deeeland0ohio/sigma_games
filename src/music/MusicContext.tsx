@@ -34,6 +34,7 @@ interface MusicContextType {
   currentTime: number;
   duration: number;
   isLoadingAudio: boolean;
+  playbackError: string | null;
   isRepeating: boolean;
   lyrics: string;
   currentLyricLine: string;
@@ -84,6 +85,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
+  const [playbackError, setPlaybackError] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState('');
   const [parsedLyrics, setParsedLyrics] = useState<{ time: number; text: string }[]>([]);
   const [currentLyricLine, setCurrentLyricLine] = useState('');
@@ -522,6 +524,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
     const { signal } = abortController;
 
     const currentRequestId = ++playRequestIdRef.current;
+    setPlaybackError(null);
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -649,6 +652,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
       if (!playbackSuccess) {
         setIsLoadingAudio(false);
+        setPlaybackError('This track could not be played. Try the same song on another source.');
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') {
@@ -664,6 +668,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         }
         setIsLoadingAudio(false);
         setIsPlaying(false);
+        setPlaybackError('This track could not be played. Try the same song on another source.');
       }
     }
   };
@@ -718,6 +723,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         currentTime,
         duration,
         isLoadingAudio,
+        playbackError,
         isRepeating,
         lyrics,
         currentLyricLine,
