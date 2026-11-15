@@ -31,7 +31,7 @@ const isPlatformName = (str?: string) => {
   return ['soundcloud', 'youtube', 'youtube music', 'octave', 'apple music', 'deezer', 'yt'].includes(s);
 };
 
-export type MusicSource = 'audius' | 'apple';
+export type MusicSource = 'tidal' | 'ytm' | 'scdlp';
 
 interface SourceOption {
   id: MusicSource;
@@ -43,18 +43,25 @@ interface SourceOption {
 
 const SOURCES: SourceOption[] = [
   {
-    id: 'audius',
-    name: 'Audius',
-    colorClass: 'text-purple-400',
-    activeBg: 'bg-purple-500/20 border-purple-500/40 text-purple-300 shadow-purple-500/10',
-    icon: <Zap size={14} className="text-purple-400" />
+    id: 'tidal',
+    name: 'Tidal',
+    colorClass: 'text-cyan-400',
+    activeBg: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-cyan-500/10',
+    icon: <Headphones size={14} className="text-cyan-400" />
   },
   {
-    id: 'apple',
-    name: 'Apple Music',
-    colorClass: 'text-pink-400',
-    activeBg: 'bg-pink-500/20 border-pink-500/40 text-pink-300 shadow-pink-500/10',
-    icon: <Headphones size={14} className="text-pink-400" />
+    id: 'ytm',
+    name: 'YouTube Music',
+    colorClass: 'text-red-400',
+    activeBg: 'bg-red-500/20 border-red-500/40 text-red-300 shadow-red-500/10',
+    icon: <Radio size={14} className="text-red-400" />
+  },
+  {
+    id: 'scdlp',
+    name: 'SoundCloud',
+    colorClass: 'text-orange-400',
+    activeBg: 'bg-orange-500/20 border-orange-500/40 text-orange-300 shadow-orange-500/10',
+    icon: <Disc size={14} className="text-orange-400" />
   }
 ];
 
@@ -87,7 +94,7 @@ export default function MusicSection() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [hasSearched, setHasSearched] = useState(false);
-  const [musicSource, setMusicSource] = useState<MusicSource>('audius');
+  const [musicSource, setMusicSource] = useState<MusicSource>('scdlp');
   const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {

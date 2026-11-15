@@ -60,16 +60,37 @@ function formatSeconds(secs: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-export function MusicProvider({ children }: { children: ReactNode }) {
-  const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(() => {
-    const saved = storage.getItem('app-music-current-track');
-    return saved ? JSON.parse(saved) : null;
-  });
+const PLAYABLE_SOURCES = new Set(['tidal', 'ytm', 'scdlp']);
 
-  const [playlist, setPlaylist] = useState<MusicTrack[]>(() => {
-    const saved = storage.getItem('app-music-playlist');
-    return saved ? JSON.parse(saved) : [];
-  });
+function restoreTrack(raw: string | null): MusicTrack | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || !PLAYABLE_SOURCES.has(String(parsed.source))) return null;
+    return parsed as MusicTrack;
+  } catch {
+    return null;
+  }
+}
+
+function restorePlaylist(raw: string | null): MusicTrack[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((track) => PLAYABLE_SOURCES.has(String(track?.source))) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function MusicProvider({ children }: { children: ReactNode }) {
+  const [currentTrack, setCurrentTrack] = useState<MusicTrack | null>(() =>
+    restoreTrack(storage.getItem('app-music-current-track'))
+  );
+
+  const [playlist, setPlaylist] = useState<MusicTrack[]>(() =>
+    restorePlaylist(storage.getItem('app-music-playlist'))
+  );
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [volume, setVolumeState] = useState<number>(() => {
@@ -562,6 +583,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
           if (playbackSuccess) {
             audioUrl = backendStreamUrl;
           }
+        }
+      }
+
+      // A signed stream ticket goes stale when the server restarts, so retry once with a fresh one.
+      if (!playbackSuccess && audioUrl.startsWith('/api/music/stream')) {
+        const refreshed = await resolveClientTrackAudio(track, true).catch(() => ({ url: '' }));
+        if (refreshed.url && refreshed.url !== audioUrl && playRequestIdRef.current === currentRequestId) {
+          audioUrl = refreshed.url;
+          playbackSuccess = await applyAudioSourceAndPlay(refreshed.url, currentRequestId);
         }
       }
 

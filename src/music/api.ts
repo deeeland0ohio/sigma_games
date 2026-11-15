@@ -25,18 +25,17 @@ export async function getMusicTicket(forceReset = false): Promise<string> {
   }
 }
 
-export async function getMusicStreamUrl(track: any): Promise<string> {
-  const id = String(track.rawId || track.id || "").replace(/^(audius|apple)_/, "");
-  const source = String(track.source || "audius").toLowerCase();
+export async function getMusicStreamUrl(track: any, forceTicket = false): Promise<string> {
+  const id = String(track.rawId || track.id || "").replace(/^(tidal|ytm|scdlp)_/, "");
+  const source = String(track.source || "ytm").toLowerCase();
   if (!id) return "";
 
-  const ticket = await getMusicTicket().catch(() => "");
+  const ticket = await getMusicTicket(forceTicket).catch(() => "");
   if (!ticket) return "";
 
   const params = new URLSearchParams({ id, source, k: ticket });
-  if (source === "apple" && typeof track.previewUrl === "string" && track.previewUrl) {
-    params.set("preview", track.previewUrl);
-  }
+  if (typeof track.ref === "string" && track.ref) params.set("ref", track.ref);
+  if (typeof track.previewUrl === "string" && track.previewUrl) params.set("preview", track.previewUrl);
   return `/api/music/stream?${params.toString()}`;
 }
 
