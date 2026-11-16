@@ -8,3 +8,6 @@ coverage/
 !.env.example
 *.data
 *.wasm
+
+# YouTube cookies for the music resolver
+cookies.txt

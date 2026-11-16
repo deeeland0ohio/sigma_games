@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import { execFile } from "child_process";
 import crypto from "crypto";
+import fs from "fs";
 import os from "os";
 import path from "path";
 import { Readable } from "stream";
@@ -31,10 +32,57 @@ const AUDIO_CACHE_TTL = 90 * 60_000;
 const YTDLP_COOKIES = process.env.YTDLP_COOKIES || "";
 const YTDLP_PROXY = process.env.YTDLP_PROXY || "";
 
+// Solving YouTube's signature/n challenges needs a JavaScript runtime. The Node
+// binary running this server is the obvious one, no extra install required.
+const JS_RUNTIME =
+  process.env.YTDLP_JS_RUNTIME ||
+  (process.execPath && fs.existsSync(process.execPath) ? `node:${process.execPath}` : "");
+
+function cookiesReport() {
+  if (!YTDLP_COOKIES) return { active: false, file: null, reason: "YTDLP_COOKIES is not set" };
+  const file = path.resolve(YTDLP_COOKIES);
+  let raw = "";
+  try {
+    raw = fs.readFileSync(file, "utf8");
+  } catch {
+    return { active: false, file, reason: "cookies file is missing or unreadable" };
+  }
+
+  const lines = raw.split("\n").filter((line) => line.trim() && !line.startsWith("#"));
+  const entries = lines.map((line) => line.split("\t"));
+  const names = new Set(entries.map((parts) => parts[5]).filter(Boolean));
+  const signedIn = names.has("SID") || names.has("__Secure-1PSID") || names.has("__Secure-3PSID");
+  const expires = entries
+    .filter((parts) => ["SID", "HSID", "__Secure-1PSID", "__Secure-3PSID"].includes(parts[5] || ""))
+    .map((parts) => Number(parts[4]))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const expiresAt = expires.length ? Math.min(...expires) : 0;
+
+  return {
+    active: signedIn,
+    file,
+    entries: lines.length,
+    signedIn,
+    expiresAt: expiresAt ? new Date(expiresAt * 1000).toISOString() : null,
+    reason: signedIn ? null : "cookies file has no YouTube login (exported while signed out?)"
+  };
+}
+
+function proxyReport() {
+  if (!YTDLP_PROXY) return { active: false, host: null, reason: "YTDLP_PROXY is not set" };
+  try {
+    const parsed = new URL(YTDLP_PROXY);
+    return { active: true, host: `${parsed.protocol}//${parsed.host}`, reason: null };
+  } catch {
+    return { active: true, host: "(unparsable value)", reason: "proxy value is not a valid URL" };
+  }
+}
+
 function ytdlpFlags(): string[] {
   const flags = ["--no-warnings"];
-  if (YTDLP_COOKIES) flags.push("--cookies", YTDLP_COOKIES);
+  if (YTDLP_COOKIES && fs.existsSync(path.resolve(YTDLP_COOKIES))) flags.push("--cookies", path.resolve(YTDLP_COOKIES));
   if (YTDLP_PROXY) flags.push("--proxy", YTDLP_PROXY);
+  if (JS_RUNTIME) flags.push("--js-runtimes", JS_RUNTIME);
   return flags;
 }
 
@@ -330,16 +378,20 @@ async function soundcloudFallback(name: string, artist = ""): Promise<{ kind: "u
 }
 
 async function resolveUpstream(target: string): Promise<{ kind: "url" | "file"; value: string }> {
-  try {
-    const binary = await ytdlpBinary();
-    if (!binary) throw new Error("yt-dlp is not installed");
+  // googlevideo links are tied to the downloader that asked for them and answer
+  // 403 to a plain fetch, so YouTube audio is always pulled down into the cache.
+  if (!/youtube\.com|youtu\.be/i.test(target)) {
+    try {
+      const binary = await ytdlpBinary();
+      if (!binary) throw new Error("yt-dlp is not installed");
 
-    const raw = await runYtdlp(binary, ["-g", "-f", "bestaudio/best", ...ytdlpFlags(), target]);
-    const url = raw.split("\n").map((line) => line.trim()).find((line) => line.startsWith("http"));
+      const raw = await runYtdlp(binary, ["-g", "-f", "bestaudio/best", ...ytdlpFlags(), target]);
+      const url = raw.split("\n").map((line) => line.trim()).find((line) => line.startsWith("http"));
 
-    if (url && !url.includes("m3u8")) return { kind: "url", value: url };
-  } catch {
-    /* fall through to a cached download */
+      if (url && !url.includes("m3u8")) return { kind: "url", value: url };
+    } catch {
+      /* fall through to a cached download */
+    }
   }
 
   const audio = await downloadAudio(target);
@@ -515,8 +567,13 @@ musicRouter.get("/ping", async (_req: Request, res: Response) => {
     sources: SOURCES,
     ytdlp: binary ? path.basename(binary) : null,
     ffmpeg: (await ffmpegBinary()) ? path.basename((await ffmpegBinary()) as string) : null,
-    cookies: Boolean(YTDLP_COOKIES),
-    proxy: Boolean(YTDLP_PROXY),
+    cookies: cookiesReport(),
+    proxy: proxyReport(),
+    jsRuntime: JS_RUNTIME || null,
+    youtube: {
+      // Full YouTube audio needs a trusted address or an account; without either only previews play.
+      mode: YTDLP_COOKIES && YTDLP_PROXY ? "cookies+proxy" : YTDLP_COOKIES ? "cookies" : YTDLP_PROXY ? "proxy" : "blocked-ip-fallbacks-only"
+    },
     tidal: Boolean(TIDAL_CLIENT_ID)
   });
 });
@@ -617,7 +674,11 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
         if (source === "ytm") {
           const fallback = (await soundcloudFallback(name, artist)) ?? (await deezerPreview(name, artist));
           if (!fallback) {
-            res.status(424).json({ error: `${describeFailure(error)}, and no match was found elsewhere` });
+            const hint =
+              !YTDLP_COOKIES && !YTDLP_PROXY
+                ? " (this server has no YouTube cookies or proxy configured)"
+                : "";
+            res.status(424).json({ error: `${describeFailure(error)}, and no match was found elsewhere${hint}` });
             return;
           }
           res.set("X-Music-Fallback", fallback.value.includes("dzcdn") ? "deezer-preview" : "soundcloud");
