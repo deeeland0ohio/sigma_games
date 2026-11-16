@@ -4,6 +4,10 @@ import compression from "compression";
 import path from "path";
 import fs from "fs";
 
+process.on("unhandledRejection", (reason) => {
+  console.error("[unhandledRejection]", reason);
+});
+
 try {
   const envPath = path.resolve(process.cwd(), ".env");
   if (fs.existsSync(envPath)) {

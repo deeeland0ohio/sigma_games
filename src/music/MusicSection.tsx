@@ -84,7 +84,8 @@ export default function MusicSection() {
     duration,
     seek,
     isLoadingAudio,
-    playbackError
+    playbackError,
+    streamNote
   } = useMusic();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -261,6 +262,9 @@ export default function MusicSection() {
                 )}
                 {currentTrack?.album && !isPlatformName(currentTrack.album) && <span className="truncate">• {currentTrack.album}</span>}
               </div>
+              {streamNote && (
+                <p className="text-[11px] font-medium text-amber-400/90">{streamNote}</p>
+              )}
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">

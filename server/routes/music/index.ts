@@ -4,6 +4,7 @@ import crypto from "crypto";
 import os from "os";
 import path from "path";
 import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 const TICKET_TTL_SECONDS = 60 * 60 * 2;
 const TICKET_SECRET = process.env.MUSIC_TICKET_SECRET || crypto.randomBytes(32).toString("hex");
@@ -252,7 +253,7 @@ async function downloadAudio(target: string): Promise<CachedAudio> {
 }
 
 async function youtubeMatch(name: string, artist = ""): Promise<{ kind: "url" | "file"; value: string } | null> {
-  for (const query of matchQueries(artist, name)) {
+  for (const query of matchQueries(name, artist)) {
     try {
       const entries = await ytdlpJson(`ytsearch1:${query}`);
       const song = youtubeSong(entries[0]);
@@ -276,24 +277,41 @@ function cleanMatchQuery(value: string): string {
 
 function describeFailure(error: unknown): string {
   const text = String(error);
+  if (/drm protected/i.test(text)) return "that upload is DRM protected";
   if (/sign in to confirm|not a bot|cookies/i.test(text)) return "the source blocks this server";
   if (/not installed/i.test(text)) return "yt-dlp is not installed here";
   if (/timed? ?out|ETIMEDOUT/i.test(text)) return "the source timed out";
-  if (/private video|unavailable|removed/i.test(text)) return "that upload is gone";
+  if (/private video|unavailable|removed|not available/i.test(text)) return "that upload is gone";
   return "the source did not return audio";
 }
 
-function matchQueries(...parts: string[]): string[] {
+function matchQueries(name: string, artist = ""): string[] {
   const attempts = [
-    cleanMatchQuery(parts.join(" ")),
-    cleanMatchQuery(parts.filter(Boolean).slice(0, 8).join(" ")),
-    cleanMatchQuery(parts[0] || "")
+    cleanMatchQuery(`${artist} ${name}`),
+    cleanMatchQuery(name.split(/\s+/).slice(0, 8).join(" ")),
+    cleanMatchQuery(name)
   ];
   return [...new Set(attempts.filter((query) => query.length > 2))];
 }
 
+// Last resort: Deezer hands out 30 second previews with no key at all.
+async function deezerPreview(name: string, artist = ""): Promise<{ kind: "url" | "file"; value: string } | null> {
+  for (const query of matchQueries(name, artist).slice(0, 2)) {
+    try {
+      const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=5`);
+      if (!res.ok) continue;
+      const data = await res.json().catch(() => ({}));
+      const hit = (Array.isArray(data?.data) ? data.data : []).find((item: any) => typeof item?.preview === "string" && item.preview);
+      if (hit?.preview) return { kind: "url", value: hit.preview };
+    } catch {
+      /* try the next query */
+    }
+  }
+  return null;
+}
+
 async function soundcloudFallback(name: string, artist = ""): Promise<{ kind: "url" | "file"; value: string } | null> {
-  for (const query of matchQueries(artist, name)) {
+  for (const query of matchQueries(name, artist)) {
     try {
       const entries = await ytdlpJson(`scsearch5:${query}`);
       const candidates = entries
@@ -578,7 +596,8 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
       upstream =
         (target ? await resolveUpstream(target).catch(() => null) : null) ??
         (await youtubeMatch(name, artist)) ??
-        (await soundcloudFallback(name, artist));
+        (await soundcloudFallback(name, artist)) ??
+        (await deezerPreview(name, artist));
 
       if (!upstream) {
         res.status(424).json({ error: "no audio match for this track" });
@@ -594,14 +613,19 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
         }
         upstream = await resolveUpstream(target);
       } catch (error) {
-        // YouTube is blocked on plenty of hosts, so borrow SoundCloud audio for the same song.
+        // YouTube is blocked on plenty of hosts, so borrow the same song from elsewhere.
         if (source === "ytm") {
-          const fallback = await soundcloudFallback(name, artist);
+          const fallback = (await soundcloudFallback(name, artist)) ?? (await deezerPreview(name, artist));
           if (!fallback) {
-            res.status(424).json({ error: describeFailure(error) });
+            res.status(424).json({ error: `${describeFailure(error)}, and no match was found elsewhere` });
             return;
           }
-          res.set("X-Music-Fallback", "soundcloud");
+          res.set("X-Music-Fallback", fallback.value.includes("dzcdn") ? "deezer-preview" : "soundcloud");
+          upstream = fallback;
+        } else if (source === "scdlp") {
+          const fallback = await deezerPreview(name, artist);
+          if (!fallback) throw error;
+          res.set("X-Music-Fallback", "deezer-preview");
           upstream = fallback;
         } else {
           throw error;
@@ -642,9 +666,16 @@ async function proxyAudio(upstream: string, req: Request, res: Response): Promis
       res.end();
       return;
     }
-    Readable.fromWeb(upstreamRes.body as any).pipe(res);
+    // An upstream that drops mid-stream must not take the whole server with it.
+    await pipeline(Readable.fromWeb(upstreamRes.body as any), res).catch(() => {
+      if (!res.writableEnded) res.destroy();
+    });
   } catch {
-    res.status(502).json({ error: "audio unavailable" });
+    if (!res.headersSent) {
+      res.status(502).json({ error: "audio unavailable" });
+    } else if (!res.writableEnded) {
+      res.destroy();
+    }
   }
 }
 

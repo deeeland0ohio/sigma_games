@@ -35,6 +35,7 @@ interface MusicContextType {
   duration: number;
   isLoadingAudio: boolean;
   playbackError: string | null;
+  streamNote: string | null;
   isRepeating: boolean;
   lyrics: string;
   currentLyricLine: string;
@@ -107,6 +108,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
   const [duration, setDuration] = useState(0);
   const [isLoadingAudio, setIsLoadingAudio] = useState(false);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
+  const [streamNote, setStreamNote] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState('');
   const [parsedLyrics, setParsedLyrics] = useState<{ time: number; text: string }[]>([]);
   const [currentLyricLine, setCurrentLyricLine] = useState('');
@@ -547,6 +549,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
 
     const currentRequestId = ++playRequestIdRef.current;
     setPlaybackError(null);
+    setStreamNote(null);
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -596,9 +599,31 @@ export function MusicProvider({ children }: { children: ReactNode }) {
       // The server may have to resolve a fresh upstream, so wait for it to be ready
       // before handing the URL to the <audio> element (which gives up quickly).
       if (audioUrl.startsWith('/api/music/stream')) {
-        const warm = await fetch(audioUrl, { headers: { Range: 'bytes=0-0' }, signal }).catch(() => null);
+        const warmController = new AbortController();
+        const warmTimer = setTimeout(() => warmController.abort(), 25000);
+        const warm = await fetch(audioUrl, {
+          headers: { Range: 'bytes=0-0' },
+          signal: warmController.signal
+        }).catch(() => null);
+        clearTimeout(warmTimer);
 
-        if (warm && warm.status === 401) {
+        if (warm) {
+          setStreamNote(
+            warm.headers.get('X-Music-Fallback') === 'deezer-preview'
+              ? '30 second preview - the full stream is blocked from this server'
+              : null
+          );
+        }
+
+        if (!warm) {
+          if (playRequestIdRef.current !== currentRequestId) return;
+          setIsLoadingAudio(false);
+          setIsPlaying(false);
+          setPlaybackError('The source took too long to respond. Try another track.');
+          return;
+        }
+
+        if (warm.status === 401) {
           const refreshed = await resolveClientTrackAudio(track, true).catch(() => ({ url: '' }));
           if (refreshed.url && playRequestIdRef.current === currentRequestId) audioUrl = refreshed.url;
         } else if (warm && !warm.ok) {
@@ -731,6 +756,7 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         duration,
         isLoadingAudio,
         playbackError,
+        streamNote,
         isRepeating,
         lyrics,
         currentLyricLine,
