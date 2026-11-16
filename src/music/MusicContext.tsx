@@ -608,10 +608,15 @@ export function MusicProvider({ children }: { children: ReactNode }) {
         clearTimeout(warmTimer);
 
         if (warm) {
+          const servedFrom = warm.headers.get('X-Music-Fallback');
           setStreamNote(
-            warm.headers.get('X-Music-Fallback') === 'deezer-preview'
+            servedFrom === 'deezer-preview'
               ? '30 second preview - the full stream is blocked from this server'
-              : null
+              : servedFrom === 'soundcloud'
+                ? 'full track matched from a SoundCloud upload'
+                : servedFrom === 'youtube'
+                  ? 'full track matched from YouTube'
+                  : null
           );
         }
 

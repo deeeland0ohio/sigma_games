@@ -358,18 +358,55 @@ async function deezerPreview(name: string, artist = ""): Promise<{ kind: "url" |
   return null;
 }
 
-async function soundcloudFallback(name: string, artist = ""): Promise<{ kind: "url" | "file"; value: string } | null> {
+function normalizeWords(value: string): string[] {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(" ")
+    .filter((word) => word.length > 2);
+}
+
+// Lower is better. Sharing the title matters far more than an exact length match;
+// a different mix with the right name still beats a shorter, unrelated upload.
+function matchScore(candidate: Song, name: string, duration: number): number {
+  const wanted = normalizeWords(name);
+  const present = new Set(normalizeWords(candidate.name));
+  const overlap = wanted.length ? wanted.filter((word) => present.has(word)).length / wanted.length : 0;
+  const drift =
+    duration > 0 && candidate.duration > 0
+      ? Math.abs(candidate.duration - duration) / Math.max(duration, 1)
+      : 0;
+  return (1 - overlap) * 10 + Math.min(drift, 1) * 6;
+}
+
+async function soundcloudFallback(
+  name: string,
+  artist = "",
+  duration = 0
+): Promise<{ kind: "url" | "file"; value: string } | null> {
   for (const query of matchQueries(name, artist)) {
     try {
-      const entries = await ytdlpJson(`scsearch5:${query}`);
+      const entries = await ytdlpJson(`scsearch10:${query}`);
       const candidates = entries
         .map(soundcloudSong)
         .filter((song: Song | null): song is Song => Boolean(song?.ref))
-        .filter((song) => song.duration > 20 && song.duration <= 600)
-        .sort((a, b) => a.duration - b.duration);
+        .filter((song) => song.duration > 20 && song.duration <= 900)
+        .map((song) => ({ song, score: matchScore(song, name, duration) }))
+        .sort((a, b) => a.score - b.score);
 
-      const song = candidates[0];
-      if (song?.ref) return await resolveUpstream(song.ref);
+      const best = candidates[0];
+      if (!best?.song.ref) continue;
+
+      // A wildly different length means the upload is a different version, not this song.
+      if (duration && best.song.duration && Math.abs(best.song.duration - duration) > Math.max(15, duration * 0.25)) {
+        continue;
+      }
+      if (best.score > 9.5) continue;
+
+      return await resolveUpstream(best.song.ref);
     } catch {
       /* try the next, shorter query */
     }
@@ -653,7 +690,7 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
       upstream =
         (target ? await resolveUpstream(target).catch(() => null) : null) ??
         (await youtubeMatch(name, artist)) ??
-        (await soundcloudFallback(name, artist)) ??
+        (await soundcloudFallback(name, artist, trackDuration)) ??
         (await deezerPreview(name, artist));
 
       if (!upstream) {
@@ -672,7 +709,8 @@ musicRouter.get("/stream", async (req: Request, res: Response) => {
       } catch (error) {
         // YouTube is blocked on plenty of hosts, so borrow the same song from elsewhere.
         if (source === "ytm") {
-          const fallback = (await soundcloudFallback(name, artist)) ?? (await deezerPreview(name, artist));
+          const fallback =
+            (await soundcloudFallback(name, artist, trackDuration)) ?? (await deezerPreview(name, artist));
           if (!fallback) {
             const hint =
               !YTDLP_COOKIES && !YTDLP_PROXY
