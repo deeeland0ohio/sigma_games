@@ -18,7 +18,6 @@ import {
   BadgeCheck,
   Radio,
   Zap,
-  Headphones,
   Wrench
 } from 'lucide-react';
 
@@ -31,7 +30,7 @@ const isPlatformName = (str?: string) => {
   return ['soundcloud', 'youtube', 'youtube music', 'octave', 'apple music', 'deezer', 'yt'].includes(s);
 };
 
-export type MusicSource = 'tidal' | 'ytm' | 'scdlp';
+export type MusicSource = 'ytm' | 'scdlp';
 
 interface SourceOption {
   id: MusicSource;
@@ -42,13 +41,6 @@ interface SourceOption {
 }
 
 const SOURCES: SourceOption[] = [
-  {
-    id: 'tidal',
-    name: 'Tidal',
-    colorClass: 'text-cyan-400',
-    activeBg: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300 shadow-cyan-500/10',
-    icon: <Headphones size={14} className="text-cyan-400" />
-  },
   {
     id: 'ytm',
     name: 'YouTube Music',

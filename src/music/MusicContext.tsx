@@ -61,7 +61,7 @@ function formatSeconds(secs: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-const PLAYABLE_SOURCES = new Set(['tidal', 'ytm', 'scdlp']);
+const PLAYABLE_SOURCES = new Set(['ytm', 'scdlp']);
 
 function restoreTrack(raw: string | null): MusicTrack | null {
   if (!raw) return null;
