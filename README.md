@@ -1,4 +1,3 @@
 # i messed up the old repo 😭 this is the new one
 
-THIS IS CODED BY GEMINI, ALL IDEAS ARE MINE THOUGH. This is v1.0
-see it for yourself! https://sigma-games.dev/ | https://sigma-sigma-rizz.vercel.app/
+thank you big daddy deepseek I need help :)))
