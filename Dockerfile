@@ -43,8 +43,6 @@ RUN apt-get update \
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/static.html ./static.html
-COPY --from=builder /app/static.svg ./static.svg
 
 # Install only production dependencies
 RUN npm install --omit=dev

@@ -48,42 +48,6 @@ async function startServer() {
   const publicDir = path.join(process.cwd(), "public");
   const distDir = path.join(process.cwd(), "dist");
 
-  app.get("/static.html", (req, res) => {
-    const rootPath = path.join(process.cwd(), "static.html");
-    const distFallback = path.join(distDir, "static.html");
-    if (fs.existsSync(rootPath)) {
-      res.sendFile(rootPath);
-    } else if (fs.existsSync(distFallback)) {
-      res.sendFile(distFallback);
-    } else {
-      res.status(404).send('Not Found');
-    }
-  });
-
-  app.get("/static.svg", (req, res) => {
-    const rootPath = path.join(process.cwd(), "static.svg");
-    const distFallback = path.join(distDir, "static.svg");
-    if (fs.existsSync(rootPath)) {
-      res.sendFile(rootPath);
-    } else if (fs.existsSync(distFallback)) {
-      res.sendFile(distFallback);
-    } else {
-      res.status(404).send('Not Found');
-    }
-  });
-
-  app.get("/sigmastatic", (req, res) => {
-    const rootPath = path.join(process.cwd(), "static.html");
-    const distFallback = path.join(distDir, "static.html");
-    if (fs.existsSync(rootPath)) {
-      res.sendFile(rootPath);
-    } else if (fs.existsSync(distFallback)) {
-      res.sendFile(distFallback);
-    } else {
-      res.status(404).send('Not Found');
-    }
-  });
-
   if (fs.existsSync(distDir)) {
     const distAssetsDir = path.join(distDir, "assets");
     if (fs.existsSync(distAssetsDir)) {
