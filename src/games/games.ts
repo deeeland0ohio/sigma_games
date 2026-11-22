@@ -22,7 +22,7 @@ export const games: Game[] = [
   {
     id: 'music',
     title: 'Music',
-    description: "Browse, search & play music with x8rr's Music Api!",
+    description: 'Remaking :(',
     icon: Music,
     type: 'folder',
   },

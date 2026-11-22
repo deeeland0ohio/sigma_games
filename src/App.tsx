@@ -7,7 +7,7 @@ import BackgroundManager from './components/BackgroundManager';
 import SettingsOverlay from './components/SettingsOverlay';
 import { ThemeProvider } from './context/ThemeContext';
 import { FavoritesProvider } from './context/FavoritesContext';
-import { MusicProvider, MusicPage, FloatingMusicWidget } from './music';
+import MusicPage from './pages/MusicPage';
 import Favorites from './pages/Favorites';
 import Settings from './pages/Settings';
 import ChatPage from './pages/ChatPage';
@@ -48,19 +48,16 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <FavoritesProvider>
-          <MusicProvider>
-            <HashRouter>
-              <AnalyticsTracker />
-              <BackgroundManager />
-              <SettingsOverlay />
-              <FloatingMusicWidget />
-              <Routes>
-                <Route path="/" element={<Home />} />
-                <Route path="/our-games" element={<AllGames />} />
-                <Route path="/favorites" element={<Favorites />} />
-                <Route path="/music" element={<MusicPage />} />
-
-                <Route path="/settings" element={<Settings />} />
+          <HashRouter>
+            <AnalyticsTracker />
+            <BackgroundManager />
+            <SettingsOverlay />
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/our-games" element={<AllGames />} />
+              <Route path="/favorites" element={<Favorites />} />
+              <Route path="/music" element={<MusicPage />} />
+              <Route path="/settings" element={<Settings />} />
               <Route path="/play/:id" element={<GamePlayer />} />
               <Route path="/chat" element={<ChatPage />} />
               <Route path="/gn-math" element={<GnMath />} />
@@ -70,19 +67,18 @@ export default function App() {
               <Route path="/noah" element={<NoahGames />} />
               <Route path="/alexr" element={<AlexrGames />} />
               <Route path="/hydra" element={<HydraGames />} />
-                <Route path="/diesmos" element={<DiesmosGames />} />
-                <Route path="/lumin" element={<LuminGames />} />
-                <Route path="/cvk" element={<CvkGames />} />
-                <Route path="/ai-chat" element={<AiChat />} />
-                <Route path="/ai" element={<AiChat />} />
-                <Route path="/chatbots" element={<AiChat />} />
+              <Route path="/diesmos" element={<DiesmosGames />} />
+              <Route path="/lumin" element={<LuminGames />} />
+              <Route path="/cvk" element={<CvkGames />} />
+              <Route path="/ai-chat" element={<AiChat />} />
+              <Route path="/ai" element={<AiChat />} />
+              <Route path="/chatbots" element={<AiChat />} />
               <Route path="/external-player" element={<ExternalPlayer />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </HashRouter>
-        </MusicProvider>
-      </FavoritesProvider>
-    </ThemeProvider>
+        </FavoritesProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

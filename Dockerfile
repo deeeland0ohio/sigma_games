@@ -24,21 +24,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 
-# yt-dlp for YouTube audio. InnerTube gets "confirm you're not a bot" from
-# most datacenter IPs; this build is a static binary, so no Python is needed.
-# If it is blocked where this runs, the resolver simply falls back to previews.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates xz-utils \
- && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp \
- && chmod a+rx /usr/local/bin/yt-dlp \
- && curl -fsSL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz -o /tmp/ffmpeg.tar.xz \
- && tar -xJf /tmp/ffmpeg.tar.xz -C /tmp \
- && cp /tmp/ffmpeg-*-amd64-static/ffmpeg /tmp/ffmpeg-*-amd64-static/ffprobe /usr/local/bin/ \
- && chmod a+rx /usr/local/bin/ffmpeg /usr/local/bin/ffprobe \
- && rm -rf /tmp/ffmpeg.tar.xz /tmp/ffmpeg-*-amd64-static \
- && apt-get purge -y curl xz-utils \
- && rm -rf /var/lib/apt/lists/*
-
 # Copy dependency files, public assets, and build output
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/dist ./dist
