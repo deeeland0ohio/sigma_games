@@ -42,6 +42,10 @@ export interface ChatSession {
 }
 
 const DEFAULT_MODEL = 'openai/gpt-oss-120b';
+const MAX_CONTINUATIONS = 2;
+const CONTINUE_PROMPT =
+  'Your previous message was cut off before it finished. Continue exactly where it stopped. ' +
+  'Do not repeat anything you already wrote, do not add an introduction or a summary, and keep the same formatting, including any open code fences.';
 const MODEL_KEY = 'ai_model';
 const SESSIONS_KEY = 'ai_sessions';
 const ACTIVE_SESSION_KEY = 'ai_active_session_id';
@@ -51,8 +55,9 @@ const LEGACY_SESSION_KEYS = ['ai_groq_sessions', 'ai_chat_sessions'];
 const INITIAL_MODELS: ModelInfo[] = [
   { id: 'openai/gpt-oss-120b', label: 'GPT OSS 120B', owned_by: 'openai' },
   { id: 'openai/gpt-oss-20b', label: 'GPT OSS 20B', owned_by: 'openai' },
-  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', owned_by: 'meta' },
-  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B', owned_by: 'meta' },
+  { id: 'qwen/qwen3.8-27b', label: 'Qwen3.8 27B', owned_by: 'qwen' },
+  { id: 'allam-2-7b', label: 'ALLaM 2 7B', owned_by: 'sdaia' },
+  { id: 'openai/gpt-oss-safeguard-20b', label: 'Safety GPT OSS 20B', owned_by: 'openai' },
 ];
 
 const uid = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -111,7 +116,12 @@ ACTIVE RUNTIME IDENTITY:
 - When asked what model, version, or AI you are, state clearly and accurately that you are ${modelId}.
 - Total Games, if asked about is about 10.4k.
 
-Always format links and code in clean Markdown. For all other queries, answer directly without extra site trivia.`;
+Always format links and code in clean Markdown. For all other queries, answer directly without extra site trivia.
+
+CODE OUTPUT RULES:
+- When asked to write code, output the complete, runnable script or file in a single fenced code block, from the first line to the last.
+- Never abbreviate, omit sections, or write placeholders like "// rest of the code stays the same". Even for a small change, print the complete file.
+- Do not stop halfway through a file. Finish every function, block, and closing brace.`;
 }
 
 function MarkdownContent({ content }: { content: string }) {
@@ -352,14 +362,18 @@ export default function AiChat() {
     let accumulated = '';
     let thinkingShown = false;
 
-    try {
+    const streamOnce = async (messages: ChatMessage[], baseText: string) => {
+      let streamedText = baseText;
+      let finishReason: string | null = null;
+      let sawDone = false;
+
       const response = await fetch('/api/ai/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         signal: controller.signal,
         body: JSON.stringify({
           model: targetModel,
-          messages: history.map((message) => ({ role: message.role, content: message.content })),
+          messages: messages.map((message) => ({ role: message.role, content: message.content })),
           stream: true,
           systemPrompt: getSystemPrompt(targetModel),
         }),
@@ -381,17 +395,20 @@ export default function AiChat() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
-      let finished = false;
 
       const handlePayload = (payload: string) => {
         if (!payload || payload === '[DONE]') return;
         try {
           const parsed = JSON.parse(payload);
-          const delta = parsed?.choices?.[0]?.delta;
+          const choice = parsed?.choices?.[0];
+          if (typeof choice?.finish_reason === 'string' && choice.finish_reason) {
+            finishReason = choice.finish_reason;
+          }
+          const delta = choice?.delta;
           if (typeof delta?.content === 'string' && delta.content) {
-            accumulated += delta.content;
-            updateMessage(sessionId, assistantId, accumulated);
-          } else if (!accumulated && typeof delta?.reasoning === 'string' && delta.reasoning && !thinkingShown) {
+            streamedText += delta.content;
+            updateMessage(sessionId, assistantId, streamedText);
+          } else if (streamedText === baseText && typeof delta?.reasoning === 'string' && delta.reasoning && !thinkingShown) {
             thinkingShown = true;
             updateMessage(sessionId, assistantId, '*Thinking…*');
           }
@@ -400,43 +417,84 @@ export default function AiChat() {
         }
       };
 
-      const consume = (text: string) => {
-        for (const line of text.split('\n')) {
+      const consume = (chunk: string) => {
+        for (const line of chunk.split(/\r?\n/)) {
           const trimmed = line.trim();
           if (!trimmed.startsWith('data:')) continue;
           const payload = trimmed.slice(5).trim();
           if (payload === '[DONE]') {
-            finished = true;
+            sawDone = true;
             return;
           }
           handlePayload(payload);
         }
       };
 
-      while (!finished) {
+      while (!sawDone) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+        buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, '\n');
         const events = buffer.split('\n\n');
         buffer = events.pop() ?? '';
 
         for (const event of events) {
           consume(event);
-          if (finished) break;
+          if (sawDone) break;
         }
       }
 
-      if (!finished && buffer.trim()) consume(buffer);
+      if (!sawDone && buffer.trim()) consume(buffer);
 
-      if (!accumulated) {
+      if (streamedText === baseText) {
         try {
           const parsed = JSON.parse(buffer);
           const fallback = parsed?.choices?.[0]?.message?.content;
-          if (typeof fallback === 'string') accumulated = fallback;
+          if (typeof fallback === 'string' && fallback) {
+            streamedText = baseText + fallback;
+            finishReason = finishReason || 'stop';
+            sawDone = true;
+            updateMessage(sessionId, assistantId, streamedText);
+          }
         } catch {
           // no fallback body
         }
+      }
+
+      return { text: streamedText, finishReason, sawDone };
+    };
+
+    try {
+      let finishReason: string | null = null;
+      let sawDone = false;
+
+      for (let attempt = 0; attempt <= MAX_CONTINUATIONS; attempt += 1) {
+        const messages: ChatMessage[] = attempt === 0
+          ? history
+          : [
+              ...history,
+              { id: uid('msg'), role: 'assistant', content: accumulated, timestamp: Date.now() },
+              { id: uid('msg'), role: 'user', content: CONTINUE_PROMPT, timestamp: Date.now() },
+            ];
+
+        const result = await streamOnce(messages, accumulated);
+        accumulated = result.text;
+        finishReason = result.finishReason;
+        sawDone = result.sawDone;
+
+        if (controller.signal.aborted) break;
+
+        const hitLengthLimit = finishReason === 'length';
+        const endedWithoutFinish = !sawDone && !finishReason;
+
+        if ((hitLengthLimit || endedWithoutFinish) && accumulated.trim() && attempt < MAX_CONTINUATIONS) {
+          continue;
+        }
+        break;
+      }
+
+      if (finishReason === 'length' && !controller.signal.aborted) {
+        accumulated += '\n\n⚠️ The model hit its output limit, so this reply may be incomplete. Ask "continue" for the rest.';
       }
 
       updateMessage(sessionId, assistantId, accumulated || 'No response received.');

@@ -4,7 +4,9 @@ const aiRouter = Router();
 
 const GROQ_BASE_URL = (process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
 
-const UPSTREAM_TIMEOUT_MS = 45_000;
+const MODELS_TIMEOUT_MS = 20_000;
+const NON_STREAM_TIMEOUT_MS = 180_000;
+const STREAM_IDLE_TIMEOUT_MS = 90_000;
 const KEY_COOLDOWN_MS = 60_000;
 const MODELS_CACHE_MS = 10 * 60_000;
 
@@ -59,22 +61,23 @@ interface ModelInfo {
   description?: string;
 }
 
+// Current text-chat models on Groq's API. Older entries (Llama 3.1/3.3,
+// Qwen 3 32B, DeepSeek R1, Kimi K2) were retired by Groq, so they are not
+// offered here anymore.
 const GROQ_FALLBACK_MODELS: ModelInfo[] = [
-  { id: "openai/gpt-oss-120b", label: "GPT OSS 120B (Recommended)", owned_by: "openai", description: "Flagship 120B open weights model with chain-of-thought reasoning on Groq LPUs." },
-  { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "openai", description: "Fast, efficient 20B reasoning model with high throughput." },
-  { id: "llama-3.3-70b-versatile", label: "Llama 3.3 70B Versatile", owned_by: "meta", description: "State-of-the-art open weights model for general intelligence, math and coding." },
-  { id: "llama-3.1-8b-instant", label: "Llama 3.1 8B Instant", owned_by: "meta", description: "Ultra-low latency model for blazing fast responses." },
-  { id: "qwen/qwen3-32b", label: "Qwen 3 32B", owned_by: "qwen", description: "Strong analytical and multilingual reasoning model." },
-  { id: "deepseek-r1-distill-llama-70b", label: "DeepSeek R1 Distill 70B", owned_by: "deepseek", description: "Chain-of-thought reasoning distilled from DeepSeek R1." },
-  { id: "moonshotai/kimi-k2-instruct", label: "Kimi K2 Instruct", owned_by: "moonshotai", description: "Large-context instruction model for long documents and code." },
+  { id: "openai/gpt-oss-120b", label: "GPT OSS 120B (Recommended)", owned_by: "OpenAI", description: "Flagship 120B open-weights reasoning model. Best all-round choice, especially for code." },
+  { id: "openai/gpt-oss-20b", label: "GPT OSS 20B", owned_by: "OpenAI", description: "Faster, lighter 20B reasoning model with high throughput." },
+  { id: "qwen/qwen3.8-27b", label: "Qwen3.8 27B", owned_by: "Alibaba Cloud", description: "Strong analytical and multilingual model with a 131k context window." },
+  { id: "allam-2-7b", label: "ALLaM 2 7B", owned_by: "SDAIA", description: "Compact Arabic-first instruction model." },
+  { id: "openai/gpt-oss-safeguard-20b", label: "Safety GPT OSS 20B", owned_by: "OpenAI", description: "Safety and moderation tuned 20B model." },
 ];
 
 let modelsCache: { at: number; models: ModelInfo[] } | null = null;
 
-function upstreamFetch(url: string, key: string, init: RequestInit = {}) {
+function upstreamFetch(url: string, key: string, init: RequestInit = {}, signal?: AbortSignal) {
   return fetch(url, {
     ...init,
-    signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+    ...(signal ? { signal } : {}),
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${key}`,
@@ -100,7 +103,8 @@ async function readErrorMessage(response: globalThis.Response, fallback: string)
 function isGroqChatModel(model: any): boolean {
   if (!model || model.active === false) return false;
   const id = String(model.id || "").toLowerCase();
-  if (id.includes("guard")) return false;
+  // Prompt-guard classifiers are not chat models, but gpt-oss-safeguard is.
+  if (id.includes("prompt-guard") || id.includes("prompt_guard") || id.includes("guard-2-")) return false;
   if (id.includes("whisper") || id.includes("orpheus") || id.includes("tts")) return false;
   const outputs = model.output_modalities;
   if (Array.isArray(outputs) && (!outputs.includes("text") || outputs.includes("speech") || outputs.includes("transcription"))) {
@@ -115,7 +119,12 @@ async function fetchGroqModels(): Promise<ModelInfo[]> {
 
   for (const key of orderedGroqKeys()) {
     try {
-      const response = await upstreamFetch(`${GROQ_BASE_URL}/models`, key);
+      const response = await upstreamFetch(
+        `${GROQ_BASE_URL}/models`,
+        key,
+        {},
+        AbortSignal.timeout(MODELS_TIMEOUT_MS),
+      );
       if (!response.ok) continue;
       const data: any = await response.json();
       const chatModels = Array.isArray(data?.data) ? data.data.filter(isGroqChatModel) : [];
@@ -187,11 +196,16 @@ function chatBody(model: string, messages: any[], options: ChatOptions) {
     messages,
     stream: options.stream,
     ...(options.temperature !== undefined ? { temperature: Number(options.temperature) } : {}),
-    ...(options.max_tokens !== undefined ? { max_tokens: Number(options.max_tokens) } : {}),
+    ...(options.max_tokens !== undefined ? { max_completion_tokens: Number(options.max_tokens) } : {}),
   });
 }
 
-async function attemptGroq(model: string, messages: any[], options: ChatOptions): Promise<ChatResult> {
+async function attemptGroq(
+  model: string,
+  messages: any[],
+  options: ChatOptions,
+  signal?: AbortSignal,
+): Promise<ChatResult> {
   const keys = orderedGroqKeys();
   if (keys.length === 0) {
     return chatFailed("No Groq API key is configured on this server (set GROQ_API_KEYS).", 503);
@@ -202,10 +216,15 @@ async function attemptGroq(model: string, messages: any[], options: ChatOptions)
 
   for (const key of keys) {
     try {
-      const response = await upstreamFetch(`${GROQ_BASE_URL}/chat/completions`, key, {
-        method: "POST",
-        body: chatBody(model, messages, options),
-      });
+      const response = await upstreamFetch(
+        `${GROQ_BASE_URL}/chat/completions`,
+        key,
+        {
+          method: "POST",
+          body: chatBody(model, messages, options),
+        },
+        signal,
+      );
 
       if (response.ok) {
         const usedIndex = keys.indexOf(key);
@@ -235,7 +254,11 @@ async function attemptGroq(model: string, messages: any[], options: ChatOptions)
   );
 }
 
-async function pipeStream(upstream: globalThis.Response, res: Response): Promise<void> {
+async function pipeStream(
+  upstream: globalThis.Response,
+  res: Response,
+  controller: AbortController,
+): Promise<void> {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
@@ -248,13 +271,34 @@ async function pipeStream(upstream: globalThis.Response, res: Response): Promise
 
   const reader = upstream.body.getReader();
   const decoder = new TextDecoder();
+  let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const clearIdle = () => {
+    if (idleTimer) {
+      clearTimeout(idleTimer);
+      idleTimer = null;
+    }
+  };
+
+  // Abort only when the model goes quiet for a long time. A reply that keeps
+  // streaming (for example a long script) is never cut off by a total timeout.
+  const resetIdle = () => {
+    clearIdle();
+    idleTimer = setTimeout(() => {
+      console.warn("[ai] stream went quiet for too long; aborting upstream request");
+      controller.abort();
+    }, STREAM_IDLE_TIMEOUT_MS);
+  };
 
   res.on("close", () => {
+    clearIdle();
+    controller.abort();
     reader.cancel().catch(() => {});
   });
 
   try {
     for (;;) {
+      resetIdle();
       const { done, value } = await reader.read();
       if (done) break;
       res.write(decoder.decode(value, { stream: true }));
@@ -262,6 +306,7 @@ async function pipeStream(upstream: globalThis.Response, res: Response): Promise
   } catch (err: any) {
     if (err?.name !== "AbortError") console.error("[ai] stream error:", err?.message || err);
   } finally {
+    clearIdle();
     res.end();
   }
 }
@@ -307,7 +352,13 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
     max_tokens: body.max_tokens,
   };
 
-  const answer = await attemptGroq(model, conversation, options);
+  const streamController = options.stream ? new AbortController() : null;
+  const answer = await attemptGroq(
+    model,
+    conversation,
+    options,
+    streamController ? streamController.signal : AbortSignal.timeout(NON_STREAM_TIMEOUT_MS),
+  );
 
   if (!answer.ok) {
     const status = answer.status === 429 ? 429 : answer.status >= 500 ? answer.status : 502;
@@ -315,7 +366,7 @@ aiRouter.post("/ai/chat", async (req: Request, res: Response) => {
   }
 
   if (options.stream && answer.upstream) {
-    await pipeStream(answer.upstream, res);
+    await pipeStream(answer.upstream, res, streamController!);
     return;
   }
 
